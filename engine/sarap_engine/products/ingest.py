@@ -304,6 +304,10 @@ class IngestClient:
             payload["extracted_water_ha"] = extracted
             payload["water_current_ha"] = None
             # 缺本底不要回传 flood_event*
+        nested = meta.get("extras") if isinstance(meta.get("extras"), dict) else {}
+        imagery_dataset_id = _as_uuid_field(str(nested.get("imagery_dataset_id") or "") or None)
+        if imagery_dataset_id:
+            payload["imagery_dataset_id"] = imagery_dataset_id
         return payload
 
     def ingest(self, job_id: str, manifest: ProductManifest, *, task_id: str | None = None, title: str | None = None) -> dict[str, Any]:

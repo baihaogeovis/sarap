@@ -61,31 +61,42 @@ npm run dev
 
 Vite 开发服务器会把 `/api` 代理到 `http://localhost:8000`。引擎没启动时，创建处理任务会得到明确的「引擎不可用」错误；编目、权限、质检和发布接口仍可调用。
 
-## 4. 引擎（可选）
+## 4. 引擎（mock 可随 Compose 启动）
 
-`engine/Dockerfile` 尚未补上，因此现在不能用：
+引擎是内部服务（默认 [http://localhost:8081](http://localhost:8081)），不写平台业务表，第一版也不下载 Sentinel-1。镜像默认 `SARAP_ENGINE_MODE=mock`。和 API、Web 一起构建：
 
 ```bash
 docker compose --profile engine up --build
 ```
 
-请在主机上用 mock 模式启动：
+只起引擎和它依赖的 API / Redis：
+
+```bash
+docker compose --profile engine up --build engine
+```
+
+健康检查：`GET /health` 或 `GET /internal/engine/health`。进程会在后台消费队列，所以值班员创建的任务会被 mock 跑完，并把产品回传到平台 `POST /api/v1/internal/products`。产品保持 draft，由平台决定发布。
+
+也可以在主机上用 mock 模式启动（同样会拉起后台 worker，除非 `SARAP_ENGINE_WORKER=false` 或 `SARAP_ENGINE_RUN_INLINE=true`）：
 
 ```bash
 cd engine
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-SARAP_ENGINE_MODE=mock SARAP_ENGINE_INGEST_MODE=mock python -m sarap_engine.main --port 8081
+SARAP_ENGINE_MODE=mock SARAP_ENGINE_INGEST_MODE=http \
+  SARAP_ENGINE_PLATFORM_INGEST_URL=http://localhost:8000/api/v1/internal/products \
+  SARAP_ENGINE_TOKEN=dev-internal-token SARAP_INTERNAL_TOKEN=dev-internal-token \
+  python -m sarap_engine.main --port 8081
 ```
 
-引擎控制面默认是 [http://localhost:8081](http://localhost:8081)（内部接口，另见 `/health`）。mock 演示：
+没有平台、只想本地空跑时，把 `SARAP_ENGINE_INGEST_MODE` 设为 `mock`。单次演示：
 
 ```bash
 python -m sarap_engine.demo_mock
 python -m sarap_engine.demo_mock --with-baseline
 ```
 
-真实 SNAP 模式需要环境里有 `gpt`。找不到时引擎应返回 `GPT_NOT_FOUND` 并失败，不得自动改走 mock。
+真实 SNAP 模式需要环境里有 `gpt`。找不到时引擎返回 `GPT_NOT_FOUND` 并失败，不得自动改走 mock。当前镜像不安装 SNAP。
 
 ## 5. 演示账号
 
@@ -114,7 +125,7 @@ cd engine && pip install -e ".[dev]" && SARAP_ENGINE_MODE=mock pytest -q
 
 推到 `main` 或开 Pull Request 时，GitHub Actions（`.github/workflows/ci.yml`）会跑上述 API lint/测试、引擎 mock 测试和前端 typecheck/build。
 
-本地最近一次复跑结果（2026-11-14）：API 24 passed，引擎 39 passed。
+本地最近一次复跑结果（2026-11-16）：API 43 passed，引擎 54 passed。Web `npm run typecheck` 与 `npm run build` 通过。本环境没有 Docker 守护进程，镜像未在这里实际 build。
 
 ## 7. 端口一览
 
@@ -131,6 +142,6 @@ cd engine && pip install -e ".[dev]" && SARAP_ENGINE_MODE=mock pytest -q
 ## 8. 生产注意事项
 
 - 更换所有默认密钥和口令，关闭或改写启动种子，不要使用上面的演示账号。
-- 引擎 Docker 镜像补齐之前，不要把 `--profile engine` 当作可上线组成。
+- `docker compose --profile engine` 适合本地 mock。生产若要跑真实 SNAP，镜像里必须有 `gpt`，缺了会以 `GPT_NOT_FOUND` 失败，不会改走 mock。
 - 对象存储、数据库和控制面令牌按环境隔离；`SARAP_INTERNAL_TOKEN` 与 `SARAP_ENGINE_TOKEN` 必须一致且足够长。
 - 分析坐标系按试点配置，不要把 Web Mercator 当作分析原数据。

@@ -79,6 +79,10 @@ export type Area = {
   is_pilot: boolean;
   analysis_crs: string;
   exchange_crs: string;
+  grid_res_m: number;
+  grid_origin_x: number;
+  grid_origin_y: number;
+  aoi_geojson: Record<string, unknown> | null;
   bbox_json: Project["bbox_json"];
   config_json: Record<string, unknown>;
 };
@@ -103,12 +107,17 @@ export type SceneActivation = {
 
 export type Dataset = {
   id: string;
+  project_id: string | null;
   code: string;
   name: string;
   dataset_type: string;
   crs: string;
   status: string;
   source: string;
+  storage_uri: string;
+  s1_product_id: string;
+  time_start: string | null;
+  time_end: string | null;
 };
 
 export type Baseline = {
@@ -124,6 +133,7 @@ export type Baseline = {
 export type Task = {
   id: string;
   project_id: string;
+  area_id: string | null;
   scene_code: string;
   code: string;
   title: string;
@@ -134,23 +144,55 @@ export type Task = {
   progress: number;
   step: string;
   error_message: string;
+  error_code: string;
   engine_job_id: string;
+  s1_product_id: string;
+  baseline_version_id: string | null;
   created_at: string;
 };
 
 export type Product = {
   id: string;
   project_id: string;
+  task_id: string | null;
   scene_code: string;
   code: string;
   title: string;
   product_type: string;
   version: number;
   status: string;
+  flood_event_status: string;
+  extracted_water_ha: number | null;
+  water_current_ha: number | null;
+  flood_event_ha: number | null;
+  s1_product_id: string;
   metadata_json: Record<string, unknown>;
   review_comment: string;
   withdraw_reason: string;
   published_at: string | null;
+};
+
+export type DataAssetVersion = {
+  id: string;
+  asset_id: string;
+  version_no: string;
+  review_status: string;
+  storage_uri: string;
+  crs: string;
+  applicable_area_name: string;
+  valid_from: string | null;
+  valid_to: string | null;
+};
+
+export type DataAsset = {
+  id: string;
+  project_id: string | null;
+  area_id: string | null;
+  asset_code: string;
+  name: string;
+  asset_type: string;
+  default_crs: string;
+  versions?: DataAssetVersion[];
 };
 
 export type Briefing = {
@@ -177,14 +219,34 @@ export const api = {
   scenes: () => request<Scene[]>("/scenes"),
   activations: (projectId: string) => request<SceneActivation[]>(`/projects/${projectId}/scenes`),
   datasets: (projectId: string) => request<Dataset[]>(`/datasets?project_id=${projectId}`),
+  createDataset: (body: Record<string, unknown>) =>
+    request<Dataset>("/datasets", { method: "POST", body: JSON.stringify(body) }),
   baselines: (projectId: string) => request<Baseline[]>(`/baselines?project_id=${projectId}`),
+  dataAssets: (projectId: string, reviewStatus?: string) => {
+    const query = new URLSearchParams({ project_id: projectId });
+    if (reviewStatus) query.set("review_status", reviewStatus);
+    return request<DataAsset[]>(`/data-assets?${query}`);
+  },
+  createDataAsset: (body: Record<string, unknown>) =>
+    request<DataAsset>("/data-assets", { method: "POST", body: JSON.stringify(body) }),
+  createDataAssetVersion: (assetId: string, body: Record<string, unknown>) =>
+    request<DataAssetVersion>(`/data-assets/${assetId}/versions`, { method: "POST", body: JSON.stringify(body) }),
+  publishDataAssetVersion: (versionId: string) =>
+    request<DataAssetVersion>(`/data-asset-versions/${versionId}/publish`, {
+      method: "POST",
+      body: JSON.stringify({ comment: "发布供处理任务引用" }),
+    }),
   tasks: (projectId: string) => request<Task[]>(`/tasks?project_id=${projectId}`),
   task: (id: string) => request<Task>(`/tasks/${id}`),
   createTask: (body: Record<string, unknown>) =>
     request<Task>("/tasks", { method: "POST", body: JSON.stringify(body) }),
   retryTask: (id: string) => request<Task>(`/tasks/${id}/retry`, { method: "POST" }),
   cancelTask: (id: string) => request<Task>(`/tasks/${id}/cancel`, { method: "POST" }),
-  products: (projectId: string) => request<Product[]>(`/products?project_id=${projectId}`),
+  products: (projectId: string, taskId?: string) => {
+    const query = new URLSearchParams({ project_id: projectId });
+    if (taskId) query.set("task_id", taskId);
+    return request<Product[]>(`/products?${query}`);
+  },
   product: (id: string) => request<Product>(`/products/${id}`),
   submitProduct: (id: string) => request<Product>(`/products/${id}/submit`, { method: "POST", body: "{}" }),
   rejectProduct: (id: string, comment: string) =>

@@ -61,8 +61,8 @@ services:
       redis:
         condition: service_healthy
 
-  # The engine package is developed in parallel under engine/.
-  # Enable this service once engine/Dockerfile exists:
+  # Internal control plane. Mock by default; does not download Sentinel-1
+  # and does not write platform business tables.
   #   docker compose --profile engine up --build
   engine:
     profiles: ["engine"]
@@ -71,8 +71,11 @@ services:
       dockerfile: engine/Dockerfile
     environment:
       SARAP_ENGINE_MODE: mock
+      SARAP_ENGINE_INGEST_MODE: http
+      SARAP_ENGINE_WORKER: "true"
       SARAP_ENGINE_REDIS_URL: redis://redis:6379/0
       SARAP_ENGINE_WORK_DIR: /data/engine-work
+      SARAP_ENGINE_DB_URL: sqlite:////data/engine-work/engine-jobs.sqlite
       SARAP_ENGINE_PLATFORM_INGEST_URL: http://api:8000/api/v1/internal/products
       SARAP_ENGINE_TOKEN: dev-internal-token
       SARAP_INTERNAL_TOKEN: dev-internal-token
@@ -85,6 +88,12 @@ services:
         condition: service_healthy
       api:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   web:
     build:

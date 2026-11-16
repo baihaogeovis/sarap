@@ -4,7 +4,8 @@
 
 ## 进行中 / 马上要做
 
-- [ ] 补 `engine/Dockerfile`，让 `docker compose --profile engine up` 能拉起引擎。现在只能在主机上单独启动引擎进程。
+- [x] 补 `engine/Dockerfile`，让 `docker compose --profile engine up --build` 能以 mock 拉起引擎并后台跑任务。缺 `gpt` 的真实模式仍以 `GPT_NOT_FOUND` 失败。
+- [x] mock 值班主路径：按项目区域（analysis_crs / AOI 可配）创建洪水任务，可选已入仓影像和已发布本底；mock 引擎跑完后，任务列表、任务详情和质检页能看到 succeeded 与 draft 产品。不下载 Sentinel-1，不需要 SNAP。
 - [ ] 钉死第一版产品发布路径，并改 `apps/api` 的状态机、测试和 `apps/api/README.md` 使之与口径一致。需求与里程碑要求 `draft → submit → pending_qc → publish`（或 reject 回 `draft`），未质检不得进入默认一张图和简报；GIS v1.1.1 则允许 P0 最短发布。当前代码仍允许 `draft` 直接发布。撤回仅管理员、再发布必须新版本且 `re_qc_required`、时效用 `suggested_target_minutes=240` 这些保持不变。
 - [ ] 一张图对接真实产品栅格/矢量（COG 或平台产物），替换当前演示矢量；完善识别与 PNG 导出。
 - [ ] 按 OpenAPI 生成 `packages/api-client`，替换占位包，给前端正式类型和调用。

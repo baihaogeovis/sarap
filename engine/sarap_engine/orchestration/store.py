@@ -29,6 +29,7 @@ class JobStore:
         engine_kwargs: dict[str, Any] = {"future": True}
         if db_url.startswith("sqlite"):
             connect_args["check_same_thread"] = False
+            connect_args["timeout"] = 30
             # :memory: 每个连接都是独立空库；StaticPool 保证建表与读写共用同一连接
             if ":memory:" in db_url or db_url in {"sqlite://", "sqlite:///", "sqlite:///:memory:"}:
                 engine_kwargs["poolclass"] = StaticPool

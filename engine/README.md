@@ -53,14 +53,22 @@ pip install -e ".[geo]"
 ## 启动 API
 
 ```bash
-cd /workspace/sarap/engine
+cd engine
 source .venv/bin/activate
 export SARAP_ENGINE_MODE=mock
 export SARAP_ENGINE_WORK_DIR=./data/engine-work
 export SARAP_ENGINE_DB_URL=sqlite:///./data/engine-jobs.sqlite
-export SARAP_ENGINE_INGEST_MODE=mock   # 无平台时用本地回执
+export SARAP_ENGINE_INGEST_MODE=mock   # 无平台时用本地回执；对接平台时用 http
 python -m sarap_engine.main --host 0.0.0.0 --port 8081
 # 或：sarap-engine --mode mock
+```
+
+`python -m sarap_engine.main` 会启动后台 worker 消费队列（`SARAP_ENGINE_WORKER=false` 可关）。`SARAP_ENGINE_RUN_INLINE=true` 则在提交请求里同步跑完，不再另起线程。
+
+Compose（仓库根目录，默认 mock，不下载 Sentinel-1）：
+
+```bash
+docker compose --profile engine up --build
 ```
 
 内部 HTTP 前缀 `/internal/engine`（字段稳定，不必套平台 `{data,error,meta}`）：

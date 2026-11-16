@@ -63,6 +63,31 @@ class EngineService:
             scene = {}
         if not isinstance(pilot, dict):
             pilot = {}
+        area_config = params.get("area_config") if isinstance(params.get("area_config"), dict) else {}
+        # 平台把区域分析 CRS / 网格放在 params 里。没有显式 pilot 时从这里抬上来，
+        # 避免退回引擎默认 CRS，也不要在引擎里写死某一条流域。
+        if not pilot.get("analysis_crs"):
+            crs = _first(params.get("analysis_crs"), area_config.get("analysis_crs"))
+            if crs:
+                pilot["analysis_crs"] = crs
+        if not pilot.get("exchange_crs") and area_config.get("exchange_crs"):
+            pilot["exchange_crs"] = area_config["exchange_crs"]
+        if not pilot.get("grid") and isinstance(params.get("grid"), dict):
+            pilot["grid"] = params["grid"]
+        if not pilot.get("aoi_wkt"):
+            wkt = _first(params.get("aoi_wkt"), area_config.get("aoi_wkt"))
+            if wkt:
+                pilot["aoi_wkt"] = wkt
+        if not pilot.get("name"):
+            name = _first(params.get("area_name"), area_config.get("name"))
+            if name:
+                pilot["name"] = name
+        if not pilot.get("overrides") and isinstance(area_config.get("overrides"), dict):
+            pilot["overrides"] = area_config["overrides"]
+        if not pilot.get("algo_profile_id") and area_config.get("algo_profile_id"):
+            pilot["algo_profile_id"] = area_config["algo_profile_id"]
+        if "suggested_target_minutes" not in pilot and area_config.get("suggested_target_minutes"):
+            pilot["suggested_target_minutes"] = area_config["suggested_target_minutes"]
         scene_id = _first(
             body.get("scene_id"),
             scene.get("scene_id"),
@@ -126,7 +151,7 @@ class EngineService:
         overrides = body.get("param_overrides") or pilot.get("overrides") or {}
         profile = profile.apply_overrides(overrides)
         param_hash = profile.param_hash()
-        baseline_version_id = body.get("baseline_version_id") or ""
+        baseline_version_id = body.get("baseline_version_id") or params.get("baseline_version_id") or ""
         key = compute_idempotency_key(
             scene_id=str(scene_id or ""),
             area_id=str(area_id),
@@ -169,17 +194,28 @@ class EngineService:
         extras["is_pilot"] = bool(is_pilot)
         if s1_product_id:
             extras["s1_product_id"] = s1_product_id
+        imagery_dataset_id = _first(params.get("imagery_dataset_id"), extras.get("imagery_dataset_id"))
+        if imagery_dataset_id:
+            extras["imagery_dataset_id"] = str(imagery_dataset_id)
+        baseline_uri = body.get("baseline_uri") or params.get("baseline_uri")
+        # mock 且只给了已发布本底版本、没有栅格文件时，用合成水体做对比。
+        # snap / pie_sar 不走这条路：缺 gpt 仍是 GPT_NOT_FOUND，不会改走 mock。
+        synthetic_flag = body.get("use_synthetic_baseline", params.get("use_synthetic_baseline"))
+        if synthetic_flag is None:
+            use_synthetic = bool(mode == ExecutionMode.MOCK.value and baseline_version_id and not baseline_uri)
+        else:
+            use_synthetic = bool(synthetic_flag)
         payload = {
             "scene": scene,
             "pilot": pilot,
             "area_id": area_id,
             "s1_product_id": s1_product_id,
             "is_pilot": bool(is_pilot),
-            "baseline_uri": body.get("baseline_uri") or params.get("baseline_uri"),
+            "baseline_uri": baseline_uri,
             "baseline_asset_id": body.get("baseline_asset_id") or params.get("baseline_asset_id"),
             "baseline_type": body.get("baseline_type") or params.get("baseline_type"),
             "param_overrides": overrides,
-            "use_synthetic_baseline": bool(body.get("use_synthetic_baseline") or params.get("use_synthetic_baseline")),
+            "use_synthetic_baseline": use_synthetic,
             "platform_task_id": platform_task_id,
             "extras": extras,
             "params": params,

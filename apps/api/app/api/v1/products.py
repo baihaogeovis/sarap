@@ -28,6 +28,7 @@ def _get(db: Session, product_id: uuid.UUID, org_id: uuid.UUID) -> Product:
 def list_products(
     project_id: uuid.UUID | None = Query(default=None),
     area_id: uuid.UUID | None = Query(default=None),
+    task_id: uuid.UUID | None = Query(default=None),
     for_map: bool = Query(default=False, description="Default one-map: published only, never withdrawn"),
     principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db),
@@ -38,6 +39,8 @@ def list_products(
         q = q.filter(Product.project_id == project_id)
     if area_id:
         q = q.filter(Product.area_id == area_id)
+    if task_id:
+        q = q.filter(Product.task_id == task_id)
     if for_map:
         q = q.filter(Product.status == "published")
     else:
