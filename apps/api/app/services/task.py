@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import Principal
 from app.core.responses import APIError
-from app.models import Area, ProcessingJob, Scene, SceneActivation, Task
+from app.models import Area, DataAssetVersion, Dataset, ProcessingJob, Scene, SceneActivation, Task
 from app.models.base import utcnow
 from app.services import audit
 from app.services.engine_client import get_engine_client
@@ -36,6 +36,24 @@ def _iso_utc(value: datetime | None) -> str | None:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _aoi_wkt(geojson: dict | None) -> str | None:
+    """Turn an area GeoJSON geometry into WKT for the engine AOI. Invalid shapes are skipped."""
+    if not geojson or not isinstance(geojson, dict):
+        return None
+    geometry = geojson.get("geometry") if geojson.get("type") == "Feature" else geojson
+    if not isinstance(geometry, dict):
+        return None
+    try:
+        from shapely.geometry import shape
+
+        geom = shape(geometry)
+    except (TypeError, ValueError, AttributeError, KeyError):
+        return None
+    if geom is None or geom.is_empty:
+        return None
+    return geom.wkt
 
 
 def build_engine_payload(db: Session, task: Task) -> dict:
@@ -75,6 +93,63 @@ def build_engine_payload(db: Session, task: Task) -> dict:
         payload["baseline_version_id"] = str(task.baseline_version_id)
     if task.algo_profile_id:
         payload["algo_profile_id"] = task.algo_profile_id
+    area = db.get(Area, task.area_id) if task.area_id is not None else None
+    if area is not None:
+        pilot: dict = {
+            "area_id": str(area.id),
+            "name": area.name,
+            "is_pilot": bool(area.is_pilot),
+            "timezone": area.timezone or "Asia/Shanghai",
+            "analysis_crs": area.analysis_crs,
+            "exchange_crs": area.exchange_crs,
+            "aoi_crs": area.exchange_crs,
+            "grid": {
+                "res_m": area.grid_res_m,
+                "origin_x": area.grid_origin_x,
+                "origin_y": area.grid_origin_y,
+            },
+        }
+        wkt = _aoi_wkt(area.aoi_geojson)
+        if wkt:
+            pilot["aoi_wkt"] = wkt
+        config = area.config_json if isinstance(area.config_json, dict) else {}
+        if config.get("algo_profile_id") and not payload.get("algo_profile_id"):
+            payload["algo_profile_id"] = config["algo_profile_id"]
+            pilot["algo_profile_id"] = config["algo_profile_id"]
+        elif payload.get("algo_profile_id"):
+            pilot["algo_profile_id"] = payload["algo_profile_id"]
+        if isinstance(config.get("overrides"), dict):
+            pilot["overrides"] = config["overrides"]
+        if config.get("suggested_target_minutes"):
+            pilot["suggested_target_minutes"] = config["suggested_target_minutes"]
+        payload["pilot"] = pilot
+        # Keep the flat params the engine also reads, using this area's CRS — not a fixed basin.
+        params.setdefault("analysis_crs", area.analysis_crs)
+        params.setdefault("area_name", area.name)
+        if wkt:
+            params.setdefault("aoi_wkt", wkt)
+    dataset = None
+    imagery_id = params.get("imagery_dataset_id")
+    if imagery_id:
+        try:
+            dataset_id = imagery_id if isinstance(imagery_id, uuid.UUID) else uuid.UUID(str(imagery_id))
+        except (TypeError, ValueError, AttributeError):
+            dataset_id = None
+        if dataset_id is not None:
+            dataset = db.get(Dataset, dataset_id)
+    scene: dict = {}
+    if dataset is not None and dataset.storage_uri:
+        scene["input_uri"] = dataset.storage_uri
+    if scene:
+        payload["scene"] = scene
+    if task.baseline_version_id is not None:
+        version = db.get(DataAssetVersion, task.baseline_version_id)
+        if version is not None and (version.storage_uri or "").strip():
+            payload["baseline_uri"] = version.storage_uri
+    if task.data_ready_at is not None:
+        ready = _iso_utc(task.data_ready_at)
+        if ready:
+            payload["data_ready_at"] = ready
     return payload
 
 
