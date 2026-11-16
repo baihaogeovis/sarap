@@ -66,6 +66,8 @@ class Settings(BaseSettings):
 
     # 测试或 demo 时同步跑完任务，不启后台线程
     run_inline: bool = False
+    # python -m sarap_engine.main 时是否后台消费队列。create_app 本身不启动线程。
+    worker: bool = True
 
     def resolved_work_dir(self) -> Path:
         path = self.work_dir
