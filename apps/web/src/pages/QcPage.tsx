@@ -49,6 +49,7 @@ export function QcPage() {
               <th>标题</th>
               <th>类型</th>
               <th>版本</th>
+              <th>口径</th>
               <th>状态</th>
               <th>操作</th>
             </tr>
@@ -59,6 +60,7 @@ export function QcPage() {
                 <td>{product.title}</td>
                 <td>{product.product_type}</td>
                 <td>v{product.version}</td>
+                <td>{product.flood_event_status || "—"}</td>
                 <td>
                   <span className={`status ${product.status}`}>{product.status}</span>
                 </td>

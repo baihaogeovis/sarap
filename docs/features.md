@@ -41,9 +41,9 @@ SARAP 是一套可复用的多场景 SAR 应用平台。第一版同时交付两
 
 本地骨架已经搭齐：
 
-- 平台 API（`apps/api`）：FastAPI，本地复跑 pytest 24 通过。
-- 前端作业台（`apps/web`）：Vite + React + TypeScript + OpenLayers 10。
-- 处理引擎（`engine`）：独立包，mock 通路可跑通；本地复跑 pytest 39 通过。SNAP 模式若找不到 `gpt`，以 `GPT_NOT_FOUND` 失败，不会偷偷改走 mock。
+- 平台 API（`apps/api`）：FastAPI，本地复跑 pytest 43 通过。
+- 前端作业台（`apps/web`）：Vite + React + TypeScript + OpenLayers 10。值班员可以选区域、已入仓影像和已发布本底，创建洪水任务。
+- 处理引擎（`engine`）：独立包，带 `Dockerfile`。mock 通路可跑通（pytest 54 通过），并由后台 worker 消费队列。SNAP 模式若找不到 `gpt`，以 `GPT_NOT_FOUND` 失败，不会偷偷改走 mock。
 
 更细的模块划分见 [架构说明](architecture.md)，待办见 [TODO](TODO.md)，本地与部署步骤见 [部署说明](deployment.md)。
 

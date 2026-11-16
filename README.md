@@ -85,13 +85,13 @@ docker compose up --build api web
 
 The first API start runs Alembic migrations and seeds the demo org, project, and users.
 
-The engine service is optional until `engine/Dockerfile` lands:
+The engine is an internal service. The image runs in mock mode (no Sentinel-1 download, no platform table writes). Start it with the API:
 
 ```bash
 docker compose --profile engine up --build
 ```
 
-Engine control plane (internal): http://localhost:8081
+Engine control plane (internal): http://localhost:8081 (`/health`). A background worker drains the queue and posts draft products back to the platform. If `SARAP_ENGINE_MODE=snap` and `gpt` is missing, jobs fail with `GPT_NOT_FOUND` and do not fall back to mock.
 
 ### Option B — Dependencies in Compose, apps on the host
 
