@@ -24,7 +24,6 @@ jobs:
         run: pytest -q
 
   engine:
-    if: hashFiles('engine/pyproject.toml') != ''
     runs-on: ubuntu-latest
     defaults:
       run:
