@@ -1,0 +1,77 @@
+{
+  "algo_profile_id": "s1_grd_flood_v1",
+  "spec_id": "SARAP-SPEC-FLOOD-V1",
+  "spec_version": "1.0.0",
+  "snap": {
+    "graph_template": "docs/specs/s1_grd_flood_v1.xml.j2",
+    "preferred_snap_version": "10.x（全环境锁定同一小版本，写入产品元数据）",
+    "pixel_spacing_m": 10.0,
+    "filter": "Refined Lee",
+    "filter_window": "7x7",
+    "dem_name": "Copernicus 30m Global DEM",
+    "orbit_type": "Sentinel Precise (Auto Download)",
+    "continue_on_orbit_fail": true,
+    "border_noise_if_ipf_lt": "3.10"
+  },
+  "extract": {
+    "T_default_vv_db": -18.0,
+    "T_clamp_vv_db": [
+      -23.0,
+      -14.0
+    ],
+    "incidence_deg": [
+      30.0,
+      45.0
+    ],
+    "slope_deg": 15.0,
+    "mmu_ha": 0.3,
+    "morph_kernel_px": 3,
+    "use_vh_constraint": true,
+    "T_VH_bright_db": -12.0,
+    "urban_policy": "downgrade",
+    "use_preevent": false,
+    "preevent_window_days": [
+      2,
+      24
+    ],
+    "delta_db_mode_b": 3.0,
+    "aoi_buffer_km": 2.0
+  },
+  "class_codes": {
+    "0": "nodata",
+    "1": "non_water",
+    "2": "permanent_or_baseline_water",
+    "3": "flood_event",
+    "4": "water_lowconf"
+  },
+  "qc_flag_bits": {
+    "0": "URBAN",
+    "1": "SHADOW",
+    "2": "LAYOVER",
+    "3": "INCIDENCE",
+    "4": "EDGE_MIXED",
+    "5": "THIN_OR_SOIL",
+    "6": "BASELINE_GAP",
+    "7": "MMU_REMOVED",
+    "8": "ORBIT_DEGRADED"
+  },
+  "official_flood_formula": "flood_event = water_current_hard AND NOT water_baseline_effective",
+  "baseline_selection": [
+    "seasonal_water if imaging time in valid_from/valid_to else permanent_water",
+    "optionally UNION preevent_water when use_preevent and same-pass pre-event scene is valid",
+    "published versions only; conflict must fail or use preferred_version_id"
+  ],
+  "impact_v1_required_if_asset_published": [
+    "admin_county",
+    "admin_township",
+    "cropland",
+    "road",
+    "settlement"
+  ],
+  "sla_minutes": 60,
+  "not_in_v1": [
+    "water_depth",
+    "hourly_revisit_claim",
+    "indoor_or_under_canopy_complete_detection"
+  ]
+}

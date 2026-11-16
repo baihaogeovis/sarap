@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Node
+node_modules/
+apps/web/dist/
+apps/web/.vite/
+*.tsbuildinfo
+npm-debug.log*
+
+# Env and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Data, object storage, SNAP outputs
+data/
+var/
+*.SAFE/
+*.dim
+*.data/
+*.N1
+*.zip
+*.tif
+*.tiff
+*.cog
+*.gpkg
+snap-tmp/
+engine-work/
+minio-data/
+postgres-data/
+redis-data/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+Thumbs.db
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
