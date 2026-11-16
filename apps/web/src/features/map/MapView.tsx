@@ -8,6 +8,7 @@ import VectorSource from "ol/source/Vector";
 import OSM from "ol/source/OSM";
 import GeoJSON from "ol/format/GeoJSON";
 import { fromLonLat } from "ol/proj";
+import { createEmpty, extend, isEmpty } from "ol/extent";
 import { Fill, Stroke, Style } from "ol/style";
 import type { LayerSpec } from "./layers";
 import { attachSwipe } from "./swipe";
@@ -17,22 +18,25 @@ type Props = {
   layers: LayerSpec[];
   center?: [number, number];
   zoom?: number;
+  fitToken?: string;
+  notice?: string;
 };
 
-function styleFor(color: string) {
+function styleFor(color: string, fill = true) {
   return new Style({
-    fill: new Fill({ color: `${color}99` }),
-    stroke: new Stroke({ color, width: 2 }),
+    fill: fill ? new Fill({ color: `${color}99` }) : undefined,
+    stroke: new Stroke({ color, width: fill ? 1.5 : 2 }),
   });
 }
 
-export function MapView({ layers, center = [116.5, 39.85], zoom = 9 }: Props) {
+export function MapView({ layers, center = [116.5, 39.85], zoom = 9, fitToken = "", notice }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const [swipe, setSwipe] = useState(false);
   const [ratio, setRatio] = useState(0.5);
   const [identify, setIdentify] = useState<Record<string, unknown> | null>(null);
   const ratioRef = useRef(ratio);
+  const fittedToken = useRef("");
   ratioRef.current = ratio;
 
   useEffect(() => {
@@ -56,7 +60,9 @@ export function MapView({ layers, center = [116.5, 39.85], zoom = 9 }: Props) {
       map.setTarget(undefined);
       mapRef.current = null;
     };
-  }, [center, zoom]);
+    // The view is created once. Later area changes refit from `fitToken`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -65,24 +71,38 @@ export function MapView({ layers, center = [116.5, 39.85], zoom = 9 }: Props) {
     existing.forEach((layer) => map.removeLayer(layer));
     const format = new GeoJSON();
     const created: VectorLayer<VectorSource>[] = [];
-    layers.forEach((spec) => {
-      if (!spec.visible || !spec.geojson) return;
+    const visible = layers.filter((spec) => spec.visible && spec.geojson);
+    visible.forEach((spec) => {
       const source = new VectorSource({
         features: format.readFeatures(spec.geojson, {
           dataProjection: "EPSG:4326",
           featureProjection: "EPSG:3857",
         }),
       });
-      const layer = new VectorLayer({ source, style: styleFor(spec.color), properties: { id: spec.id } });
+      const layer = new VectorLayer({
+        source,
+        style: styleFor(spec.color, spec.fill !== false),
+        properties: { id: spec.id },
+      });
       map.addLayer(layer);
       created.push(layer);
     });
-    const eventLayer = created.find((_, i) => layers.filter((l) => l.visible && l.geojson)[i]?.kind === "event");
+    if (fitToken && fitToken !== fittedToken.current && created.length) {
+      const productLayers = created.filter((_, index) => visible[index]?.kind !== "other");
+      const focus = productLayers.length ? productLayers : created;
+      const extent = createEmpty();
+      focus.forEach((layer) => extend(extent, layer.getSource()?.getExtent() ?? createEmpty()));
+      if (!isEmpty(extent)) {
+        fittedToken.current = fitToken;
+        map.getView().fit(extent, { padding: [64, 64, 64, 64], maxZoom: 15 });
+      }
+    }
+    const eventLayer = created.find((_, index) => visible[index]?.kind === "event");
     if (swipe && eventLayer) {
       return attachSwipe(map, eventLayer, () => ratioRef.current);
     }
     return undefined;
-  }, [layers, swipe, ratio]);
+  }, [layers, swipe, ratio, fitToken]);
 
   return (
     <div className="map-wrap">
@@ -108,6 +128,7 @@ export function MapView({ layers, center = [116.5, 39.85], zoom = 9 }: Props) {
           导出 PNG
         </button>
       </div>
+      {notice && <div className="map-empty">{notice}</div>}
       {identify && (
         <div className="identify-pop">
           <strong>识别结果</strong>

@@ -195,6 +195,41 @@ export type DataAsset = {
   versions?: DataAssetVersion[];
 };
 
+export type MapGeoJson = {
+  type: "FeatureCollection";
+  features: {
+    type: "Feature";
+    properties: Record<string, unknown>;
+    geometry: { type: string; coordinates: unknown };
+  }[];
+};
+
+export type MapProductLayer = {
+  layer_key: string;
+  title: string;
+  kind: "water" | "event" | "baseline" | "qc" | "other";
+  geojson: MapGeoJson;
+};
+
+export type MapPayload = {
+  area: {
+    id: string;
+    name: string;
+    analysis_crs: string;
+    exchange_crs: string;
+    aoi: MapGeoJson | null;
+  };
+  products: {
+    id: string;
+    title: string;
+    status: string;
+    flood_event_status: string;
+    version: number;
+    scene_code: string;
+    layers: MapProductLayer[];
+  }[];
+};
+
 export type Briefing = {
   id: string;
   project_id: string;
@@ -215,7 +250,7 @@ export const api = {
     }),
   me: () => request<User>("/auth/me"),
   projects: () => request<Project[]>("/projects"),
-  areas: (projectId: string) => request<Area[]>(`/areas?project_id=${projectId}`),
+  areas: (projectId: string) => request<Area[]>(`/projects/${projectId}/areas`),
   scenes: () => request<Scene[]>("/scenes"),
   activations: (projectId: string) => request<SceneActivation[]>(`/projects/${projectId}/scenes`),
   datasets: (projectId: string) => request<Dataset[]>(`/datasets?project_id=${projectId}`),
@@ -247,6 +282,14 @@ export const api = {
     if (taskId) query.set("task_id", taskId);
     return request<Product[]>(`/products?${query}`);
   },
+  mapLayers: (areaId: string, projectId?: string, sceneCode?: string) => {
+    const query = new URLSearchParams({ area_id: areaId });
+    if (projectId) query.set("project_id", projectId);
+    if (sceneCode) query.set("scene_code", sceneCode);
+    return request<MapPayload>(`/products/map?${query}`);
+  },
+  layerGeojson: (productId: string, layerKey: string) =>
+    request<MapGeoJson>(`/products/${productId}/layers/${layerKey}`),
   product: (id: string) => request<Product>(`/products/${id}`),
   submitProduct: (id: string) => request<Product>(`/products/${id}/submit`, { method: "POST", body: "{}" }),
   rejectProduct: (id: string, comment: string) =>

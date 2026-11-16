@@ -93,6 +93,8 @@ docker compose --profile engine up --build
 
 Engine control plane (internal): http://localhost:8081 (`/health`). A background worker drains the queue and posts draft products back to the platform. If `SARAP_ENGINE_MODE=snap` and `gpt` is missing, jobs fail with `GPT_NOT_FOUND` and do not fall back to mock.
 
+After a mock run, publish the draft from 质检 / 发布, then open 一张图 and pick the area. The default map draws that area plus published inundation or extracted-water vectors only. Draft, pending QC, and withdrawn products stay off it. If the area has no published product, the map shows an empty state and does not invent a flood polygon. The geometry uses the area's stored analysis CRS and AOI. See [部署说明](docs/deployment.md).
+
 ### Option B — Dependencies in Compose, apps on the host
 
 Requires Python 3.12+ and Node 20+. Python 3.13 is fine for local use.

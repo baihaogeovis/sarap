@@ -13,6 +13,7 @@ from app.models import Area, Dataset, ImpactStat, Product, ProductLayer, Project
 from app.schemas.common import ImpactStatOut, ProductIn, ProductLayerOut, TransitionIn
 from app.services import product as product_service
 from app.services.baselines import fill_imagery_fields, require_applicable_version
+from app.services.map_layers import DISPLAY_CRS, load_layer_geojson, published_map
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -49,6 +50,25 @@ def list_products(
             q = q.filter(Product.status.in_(allowed))
     rows = q.order_by(Product.created_at.desc()).all()
     return ok([product_out(r).model_dump(mode="json") for r in rows], meta={"total": len(rows)})
+
+
+@router.get("/map")
+def map_products(
+    area_id: uuid.UUID = Query(),
+    project_id: uuid.UUID | None = Query(default=None),
+    scene_code: str | None = Query(default=None),
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """Default one-map: the selected area and published product vectors only."""
+    principal.require("product.read")
+    area = db.get(Area, area_id)
+    if area is None or area.org_id != principal.org_id or area.deleted_at is not None:
+        raise APIError(404, "not_found", "Area not found")
+    if project_id is not None and area.project_id != project_id:
+        raise APIError(404, "not_found", "Area not found")
+    payload = published_map(db, org_id=principal.org_id, area=area, scene_code=scene_code or None)
+    return ok(payload, meta={"published_only": True, "crs": DISPLAY_CRS})
 
 
 @router.post("")
@@ -259,6 +279,47 @@ def list_layers(
         },
     }
     return ok(data, meta=meta)
+
+
+@router.get("/{product_id}/layers/{layer_key}")
+def get_layer_geojson(
+    product_id: uuid.UUID,
+    layer_key: str,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """One vector layer as EPSG:4326 GeoJSON.
+
+    Visibility matches the product: readonly only receives published rows.
+    QC can still open a draft or pending_qc product by id. The default map
+    does not call this for unpublished products.
+    """
+    principal.require("product.read")
+    row = _get(db, product_id, principal.org_id)
+    allowed = product_service.visible_status_filter(principal)
+    if allowed is not None and row.status not in allowed:
+        raise APIError(404, "not_found", "Product not found")
+    layer = (
+        db.query(ProductLayer)
+        .filter(ProductLayer.product_id == row.id, ProductLayer.layer_key == layer_key)
+        .one_or_none()
+    )
+    if layer is None:
+        raise APIError(404, "not_found", "Layer not found")
+    area = db.get(Area, row.area_id) if row.area_id else None
+    try:
+        collection = load_layer_geojson(layer, row, area)
+    except ValueError as exc:
+        raise APIError(404, "not_displayable", "Layer has no GeoJSON the map can draw") from exc
+    return ok(
+        collection,
+        meta={
+            "crs": DISPLAY_CRS,
+            "source_crs": (layer.metadata_json or {}).get("crs") or (area.analysis_crs if area else ""),
+            "layer_key": layer_key,
+            "empty": not collection.get("features"),
+        },
+    )
 
 
 @router.get("/{product_id}/stats")
