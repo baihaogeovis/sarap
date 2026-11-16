@@ -10,7 +10,7 @@ import numpy as np
 
 from sarap_engine.algo.grid import GridSpec
 from sarap_engine.algo.morphology import label_connected
-from sarap_engine.constants import CLASS_NAMES, ClassCode
+from sarap_engine.constants import ClassCode
 from sarap_engine.products.models import ProductLayer, ProductManifest, ProductMetadata
 from sarap_engine.products.raster_io import HAS_RASTERIO, write_raster
 

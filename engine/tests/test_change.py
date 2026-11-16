@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from sarap_engine.algo.change import classify_with_baseline, classify_without_baseline
 from sarap_engine.algo.grid import GridSpec
-from sarap_engine.constants import ClassCode, FloodEventStatus, qc_bit, QcFlag
+from sarap_engine.constants import ClassCode, FloodEventStatus, QcFlag, qc_bit
 
 
 def test_without_baseline_uses_class_5_not_2_or_3():

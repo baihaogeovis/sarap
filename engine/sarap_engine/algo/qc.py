@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from sarap_engine.algo.morphology import binary_dilation
-from sarap_engine.constants import UrbanPolicy, qc_bit, QcFlag
+from sarap_engine.constants import QcFlag, UrbanPolicy, qc_bit
 
 
 @dataclass

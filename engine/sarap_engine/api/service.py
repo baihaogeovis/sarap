@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from sarap_engine import PRODUCT_VERSION, SPEC_VERSION, __version__
 from sarap_engine.config import Settings, get_settings
-from sarap_engine.constants import DEFAULT_ALGO_PROFILE_ID, ErrorCode, ExecutionMode, JobStatus, Priority
+from sarap_engine.constants import (
+    DEFAULT_ALGO_PROFILE_ID,
+    ErrorCode,
+    ExecutionMode,
+    JobStatus,
+    Priority,
+)
 from sarap_engine.domain.algo_profile import load_default_profile
 from sarap_engine.orchestration.models import JobRow, job_to_dict, new_job_id, utcnow
 from sarap_engine.orchestration.state_machine import is_terminal

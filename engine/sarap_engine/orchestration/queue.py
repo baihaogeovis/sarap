@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from sarap_engine.constants import JobStatus, Priority
-from sarap_engine.orchestration.models import JobRow, utcnow
-from sarap_engine.orchestration.store import JobStore
+from sarap_engine.orchestration.models import JobRow
 from sarap_engine.orchestration.state_machine import JobStatus as _JS  # noqa: F401
+from sarap_engine.orchestration.store import JobStore
 
 
 class JobQueue:

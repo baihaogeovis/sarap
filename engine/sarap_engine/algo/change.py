@@ -11,8 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from sarap_engine.algo.grid import GridSpec, assert_grids_aligned
-from sarap_engine.constants import ClassCode, FloodEventStatus, qc_bit, QcFlag
-
+from sarap_engine.constants import ClassCode, FloodEventStatus, QcFlag, qc_bit
 
 # 本底约定：0=非水/nodata 需靠 baseline_valid 区分；推荐 0 非水、1 水体，有效区外为 nodata。
 BASELINE_WATER = 1

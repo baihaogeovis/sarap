@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-import time
 import traceback
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,12 +15,11 @@ from sarap_engine.constants import (
     ErrorCode,
     ExecutionMode,
     JobStatus,
-    Priority,
 )
-from sarap_engine.domain.algo_profile import AlgoProfile, load_default_profile
+from sarap_engine.domain.algo_profile import load_default_profile
 from sarap_engine.domain.pilot import PilotConfig
 from sarap_engine.domain.scene import SceneMeta
-from sarap_engine.orchestration.models import JobRow, job_to_dict, utcnow
+from sarap_engine.orchestration.models import JobRow, utcnow
 from sarap_engine.orchestration.preemption import should_preempt
 from sarap_engine.orchestration.queue import JobQueue
 from sarap_engine.orchestration.retry import decide_retry
@@ -31,8 +29,6 @@ from sarap_engine.plugins.base import PluginContext
 from sarap_engine.plugins.registry import default_registry
 from sarap_engine.plugins.snap.workflows.pipeline import run_postprocess
 from sarap_engine.products.ingest import IngestClient
-from sarap_engine.products.models import ProductManifest
-
 
 STEP_ORDER = [
     JobStatus.PREPARING,
@@ -352,6 +348,5 @@ class Worker:
             if not isinstance(exc, EngineError):
                 tb = traceback.format_exc()
                 exc = EngineError(ErrorCode.INTERNAL, f"{exc}\n{tb[-500:]}", retryable=True)
-            current = self.store.get(job_id)
             # 若仍在 snap_running，保留可重试语义
             return self._fail_or_retry(job_id, exc)

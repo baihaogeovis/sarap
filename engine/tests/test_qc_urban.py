@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from sarap_engine.algo.qc import apply_risk_downgrade
-from sarap_engine.constants import UrbanPolicy, qc_bit, QcFlag
+from sarap_engine.constants import QcFlag, UrbanPolicy, qc_bit
 
 
 def test_urban_default_downgrade_to_lowconf_not_deleted_or_hard():

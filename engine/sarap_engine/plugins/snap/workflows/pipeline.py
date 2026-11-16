@@ -12,15 +12,15 @@ from typing import Any
 
 import numpy as np
 
-from sarap_engine.algo.area import area_stats, count_to_ha
+from sarap_engine.algo.area import area_stats
 from sarap_engine.algo.change import classify_with_baseline, classify_without_baseline
 from sarap_engine.algo.extract import extract_water
-from sarap_engine.algo.grid import GridSpec, GridMisaligned, assert_grids_aligned
+from sarap_engine.algo.grid import GridMisaligned, GridSpec, assert_grids_aligned
 from sarap_engine.algo.qc import apply_risk_downgrade, flag_area_ha
 from sarap_engine.constants import (
     AREA_LIMITATION,
-    EXTRACTED_WATER_AREA_LABEL,
     EXTERNAL_TARGET_HOURS,
+    EXTRACTED_WATER_AREA_LABEL,
     INTERNAL_BUDGET_MINUTES,
     LIMITATIONS,
     NO_IMPACT_ASSETS_NOTE,
@@ -29,8 +29,6 @@ from sarap_engine.constants import (
     QcFlag,
 )
 from sarap_engine.domain.algo_profile import AlgoProfile
-from sarap_engine.domain.pilot import PilotConfig
-from sarap_engine.domain.scene import SceneMeta
 from sarap_engine.plugins.base import PluginContext, PreprocessResult
 from sarap_engine.products.exporters import package_product
 from sarap_engine.products.models import ProductManifest, ProductMetadata
@@ -138,7 +136,7 @@ def run_change(context: PluginContext, prep: PreprocessResult, qc_result):
     water, valid, bgrid = loaded
     try:
         assert_grids_aligned(prep.grid, bgrid, require_same_shape=True)
-    except GridMisaligned as exc:
+    except GridMisaligned:
         raise
     return classify_with_baseline(
         qc_result.hard_water,

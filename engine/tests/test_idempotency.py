@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from sarap_engine.api.service import EngineService
-from sarap_engine.products.ingest import IngestClient
 from sarap_engine.orchestration.worker import Worker
+from sarap_engine.products.ingest import IngestClient
 
 
 def _body(**kw):
@@ -52,8 +52,8 @@ def test_different_baseline_is_different_key(store, settings):
 def test_submit_accepts_platform_payload_without_pilot_id(store, settings):
     settings.run_inline = False
     from sarap_engine.api.service import EngineService
-    from sarap_engine.products.ingest import IngestClient
     from sarap_engine.orchestration.worker import Worker
+    from sarap_engine.products.ingest import IngestClient
 
     svc = EngineService(store, settings, Worker(store, settings, ingest_client=IngestClient("http://x", mode="mock")))
     data, reused = svc.submit(
@@ -85,8 +85,8 @@ def test_submit_accepts_platform_payload_without_pilot_id(store, settings):
 def test_different_s1_product_is_different_key(store, settings):
     settings.run_inline = False
     from sarap_engine.api.service import EngineService
-    from sarap_engine.products.ingest import IngestClient
     from sarap_engine.orchestration.worker import Worker
+    from sarap_engine.products.ingest import IngestClient
 
     svc = EngineService(store, settings, Worker(store, settings, ingest_client=IngestClient("http://x", mode="mock")))
     body = {

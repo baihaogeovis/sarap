@@ -13,7 +13,7 @@ from sarap_engine.algo.morphology import (
     restore_adjacent_small,
 )
 from sarap_engine.algo.threshold import ThresholdResult, estimate_threshold
-from sarap_engine.constants import qc_bit, QcFlag
+from sarap_engine.constants import QcFlag, qc_bit
 
 
 @dataclass
