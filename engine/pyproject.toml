@@ -1,0 +1,51 @@
+[project]
+name = "sarap-engine"
+version = "0.1.0"
+description = "SARAP 第一版洪水处理引擎（SNAP 水体提取、变化检测与任务编排）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.4",
+  "uvicorn[standard]>=0.30",
+  "httpx>=0.27",
+  "jinja2>=3.1",
+  "sqlalchemy>=2.0",
+  "numpy>=2.0",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+geo = [
+  "rasterio>=1.3",
+  "geopandas>=1.0",
+  "shapely>=2.0",
+  "scikit-image>=0.24",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+sarap-engine = "sarap_engine.main:cli"
+sarap-engine-mock = "sarap_engine.demo_mock:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sarap_engine*"]
+
+[tool.setuptools.package-data]
+sarap_engine = [
+  "plugins/snap/graphs/*.j2",
+  "domain/data/*.json",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

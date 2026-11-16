@@ -1,0 +1,7 @@
+{
+  "name": "@sarap/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Placeholder for TypeScript types generated from the SARAP OpenAPI schema.",
+  "types": "index.ts"
+}
