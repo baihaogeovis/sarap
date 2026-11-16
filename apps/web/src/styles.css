@@ -149,6 +149,13 @@ button { cursor: pointer; }
   border-radius: 8px;
   border: 1px solid var(--line);
 }
+.map-empty {
+  position: absolute; z-index: 2; left: 50%; bottom: 24px; transform: translateX(-50%);
+  width: min(520px, calc(100% - 32px));
+  background: rgba(15, 26, 34, 0.92);
+  border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;
+  text-align: center; color: var(--text);
+}
 .identify-pop {
   position: absolute; z-index: 2; right: 12px; top: 12px;
   width: 260px; background: rgba(15, 26, 34, 0.92);

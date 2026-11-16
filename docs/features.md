@@ -28,7 +28,7 @@ SARAP 是一套可复用的多场景 SAR 应用平台。第一版同时交付两
 
 - **工作台**：一键建任务，沿找数 → 处理 → 质检 → 发布的主路径作业。
 - **任务**：任务列表与详情，查看处理状态和产物。
-- **一张图**：叠加准范围、本底/当期水体等图层，支持识别和 PNG 导出（当前前端为演示矢量与导出桩，尚未对接真实 COG）。
+- **一张图**：选择项目里的区域后，叠加该区域已发布产品的淹没或水体范围（OpenLayers 读取平台回传的 GeoJSON）。默认图只含 `published`。没有已发布产品时显示空状态，不编造淹没面。支持图层开关、点选识别和 PNG 导出。分析仍用区域自己的 `analysis_crs`，地图只做展示用的经纬度。
 - **简报**：结构化简报，引用已发布产品。
 - **资源**：编目与本底等数据资产。
 - **管理**：项目、区域、成员、场景开通。
@@ -41,9 +41,9 @@ SARAP 是一套可复用的多场景 SAR 应用平台。第一版同时交付两
 
 本地骨架已经搭齐：
 
-- 平台 API（`apps/api`）：FastAPI，本地复跑 pytest 43 通过。
-- 前端作业台（`apps/web`）：Vite + React + TypeScript + OpenLayers 10。值班员可以选区域、已入仓影像和已发布本底，创建洪水任务。
-- 处理引擎（`engine`）：独立包，带 `Dockerfile`。mock 通路可跑通（pytest 54 通过），并由后台 worker 消费队列。SNAP 模式若找不到 `gpt`，以 `GPT_NOT_FOUND` 失败，不会偷偷改走 mock。
+- 平台 API（`apps/api`）：FastAPI，本地复跑 pytest 45 通过。`GET /products/map` 只返回所选区域的已发布产品，并把矢量从该区域的 `analysis_crs` 转到 `EPSG:4326`。
+- 前端作业台（`apps/web`）：Vite + React + TypeScript + OpenLayers 10。值班员可以选区域、已入仓影像和已发布本底，创建洪水任务。一张图按所选区域显示已发布范围。
+- 处理引擎（`engine`）：独立包，带 `Dockerfile`。mock 通路可跑通（pytest 55 通过），并由后台 worker 消费队列。mock 会把合成窗口放到区域 AOI 的分析网格上，并把 GeoJSON 随内部入库接口回传。SNAP 模式若找不到 `gpt`，以 `GPT_NOT_FOUND` 失败，不会偷偷改走 mock。
 
 更细的模块划分见 [架构说明](architecture.md)，待办见 [TODO](TODO.md)，本地与部署步骤见 [部署说明](deployment.md)。
 

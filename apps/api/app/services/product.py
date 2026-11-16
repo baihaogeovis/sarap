@@ -325,6 +325,10 @@ def sync_layers(db: Session, product: Product, artifacts: list[Any] | None = Non
             .one_or_none()
         )
         meta = dict(item.get("metadata_json") or item.get("metadata") or {})
+        if item.get("geojson") is not None and "geojson" not in meta:
+            meta["geojson"] = item.get("geojson")
+        if item.get("crs") and "crs" not in meta:
+            meta["crs"] = item.get("crs")
         if existing is None:
             db.add(
                 ProductLayer(

@@ -98,6 +98,14 @@ python -m sarap_engine.demo_mock --with-baseline
 
 真实 SNAP 模式需要环境里有 `gpt`。找不到时引擎返回 `GPT_NOT_FOUND` 并失败，不得自动改走 mock。当前镜像不安装 SNAP。
 
+### 在一张图里看淹没范围
+
+引擎跑完后产品仍是 `draft`，默认一张图不会画它。用值班员或管理员账号到「质检 / 发布」把产品发布，然后打开「一张图」，选刚才的区域。
+
+有已发布常年水体本底时，图上是「本次淹没」（强调色）和「本底水体」（水色）。没有本底时，图层标题是「提取水体（未扣本底）」，不会被改名叫本次淹没。分析坐标系用区域上保存的 `analysis_crs`，不在代码里写死。草稿、待质检和已撤回的产品不会出现在这张默认图上。该区域没有任何已发布产品时，地图只留区域范围，并提示空状态。
+
+只读账号 `readonly@sarap.local` / `readonly123` 可以打开同一张图，看不到未发布产品。
+
 ## 5. 演示账号
 
 仅用于本地，上线前必须改掉或关闭种子数据。
@@ -125,7 +133,7 @@ cd engine && pip install -e ".[dev]" && SARAP_ENGINE_MODE=mock pytest -q
 
 推到 `main` 或开 Pull Request 时，GitHub Actions（`.github/workflows/ci.yml`）会跑上述 API lint/测试、引擎 mock 测试和前端 typecheck/build。
 
-本地最近一次复跑结果（2026-11-16）：API 43 passed，引擎 54 passed。Web `npm run typecheck` 与 `npm run build` 通过。本环境没有 Docker 守护进程，镜像未在这里实际 build。
+本地最近一次复跑结果（2026-11-16）：API 45 passed，引擎 55 passed。Web `npm run typecheck` 与 `npm run build` 通过。本环境没有 Docker 守护进程，镜像未在这里实际 build。
 
 ## 7. 端口一览
 

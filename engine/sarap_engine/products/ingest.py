@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -15,6 +17,9 @@ from sarap_engine.products.models import ProductManifest
 FLOOD_EVENT_LAYERS = {"flood_event", "flood_event_poly"}
 DEPTH_KEY_FRAGMENTS = ("depth", "water_depth", "flood_depth")
 HARD_ERROR_CODES = {"PROCESSING_FAILED", "GRID_MISALIGNED", "COVERAGE_TOO_LOW"}
+# Vector layers travel with the ingest body so the platform can serve them
+# without sharing the engine work directory. Rasters stay as URIs.
+_MAX_EMBED_BYTES = 2_000_000
 
 
 def _is_uuid(value: str | None) -> bool:
@@ -115,6 +120,25 @@ def map_error_code(code: str | None) -> str:
     }:
         return "PROCESSING_FAILED" if code != "INGEST_ERROR" else code
     return code
+
+
+def _embed_vector(layer_uri: str, media_type: str) -> dict[str, Any] | None:
+    """Read a GeoJSON layer from the engine work dir for the ingest payload."""
+    looks_geo = media_type == "application/geo+json" or str(layer_uri).endswith(".geojson")
+    if not looks_geo or not layer_uri:
+        return None
+    path = Path(layer_uri)
+    if not path.is_file():
+        return None
+    try:
+        if path.stat().st_size > _MAX_EMBED_BYTES:
+            return None
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(doc, dict) or doc.get("type") != "FeatureCollection":
+        return None
+    return doc
 
 
 def is_flood_product(product_type: str | None) -> bool:
@@ -241,20 +265,32 @@ class IngestClient:
         if not has_baseline:
             meta = {key: value for key, value in meta.items() if not str(key).startswith("flood_event")}
             meta["flood_event_status"] = status
+        source_crs = (metadata.crs if metadata else "") or ""
         artifacts: list[dict[str, Any]] = []
         for layer in manifest.layers:
             if layer.name in FLOOD_EVENT_LAYERS and not has_baseline:
                 continue
-            artifacts.append(
-                {
-                    "layer_key": layer.name,
-                    "name": layer.name,
-                    "storage_uri": layer.uri,
-                    "uri": layer.uri,
-                    "media_type": layer.media_type,
-                    "empty": layer.empty,
-                }
-            )
+            item: dict[str, Any] = {
+                "layer_key": layer.name,
+                "name": layer.name,
+                "storage_uri": layer.uri,
+                "uri": layer.uri,
+                "media_type": layer.media_type,
+                "empty": layer.empty,
+            }
+            layer_meta: dict[str, Any] = {}
+            if source_crs:
+                layer_meta["crs"] = source_crs
+            if layer.empty:
+                layer_meta["empty"] = True
+            if layer.note:
+                layer_meta["note"] = layer.note
+            embedded = _embed_vector(layer.uri, layer.media_type)
+            if embedded is not None:
+                layer_meta["geojson"] = embedded
+            if layer_meta:
+                item["metadata_json"] = layer_meta
+            artifacts.append(item)
         qc_warnings: list[str] = []
         if isinstance(manifest.qc_summary, dict):
             raw = manifest.qc_summary.get("warnings") or manifest.qc_summary.get("qc_warnings") or []

@@ -7,6 +7,7 @@ import numpy as np
 from sarap_engine.algo.grid import GridSpec
 from sarap_engine.constants import EngineError, ErrorCode
 from sarap_engine.plugins.base import PluginContext, PluginResult, PreprocessResult
+from sarap_engine.plugins.mock.window import resolve_mock_window_origin
 from sarap_engine.products.raster_io import write_raster
 
 
@@ -94,14 +95,27 @@ class MockPlugin:
         self.validate(context)
         h = int(context.pilot.grid.height or 80)
         w = int(context.pilot.grid.width or 80)
+        # Keep the area's stored grid as the alignment reference, but park the
+        # synthetic window on that grid where the AOI actually is. Passing the
+        # area origin through unchanged leaves an 800 m patch at the CRS origin
+        # when the AOI is elsewhere, which the map cannot show on the area.
+        origin_x, origin_y = resolve_mock_window_origin(
+            analysis_crs=context.pilot.analysis_crs,
+            aoi_crs=context.pilot.aoi_crs or context.pilot.exchange_crs,
+            aoi_wkt=context.pilot.aoi_wkt,
+            grid_origin_x=context.pilot.grid.origin_x,
+            grid_origin_y=context.pilot.grid.origin_y,
+            res_m=context.pilot.grid.res_m,
+            width=w,
+            height=h,
+        )
         grid = GridSpec(
             crs=context.pilot.analysis_crs,
             res_m=context.pilot.grid.res_m,
-            origin_x=context.pilot.grid.origin_x,
-            origin_y=context.pilot.grid.origin_y,
+            origin_x=origin_x,
+            origin_y=origin_y,
             width=w,
             height=h,
-            transform=context.pilot.grid.affine(),
         )
         data = synthesize(grid, height=h, width=w)
         # 若任务指定了合成本底路径则由工作流读取；这里把数组放到工作目录供可选使用
