@@ -36,6 +36,17 @@ from sarap_engine.products.naming import product_id as build_product_id
 from sarap_engine.products.raster_io import read_raster
 
 
+def _metadata_extras(context: PluginContext) -> dict[str, Any]:
+    """Mark mock products explicitly. Carry the staged dataset id through to ingest."""
+    extra: dict[str, Any] = {"internal_budget_minutes": dict(INTERNAL_BUDGET_MINUTES)}
+    if context.execution_mode == "mock":
+        extra["mock"] = True
+    imagery = context.extras.get("imagery_dataset_id")
+    if imagery:
+        extra["imagery_dataset_id"] = str(imagery)
+    return extra
+
+
 def _utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
@@ -304,7 +315,7 @@ def build_metadata(
         review_status="draft",
         limitations=list(LIMITATIONS),
         param_hash=context.profile.param_hash(),
-        extras={"internal_budget_minutes": dict(INTERNAL_BUDGET_MINUTES)},
+        extras=_metadata_extras(context),
     )
 
 

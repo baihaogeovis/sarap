@@ -80,7 +80,7 @@ class JobSubmitRequest(BaseModel):
     priority: Literal["normal", "emergency"] = "normal"
     param_overrides: dict[str, Any] = Field(default_factory=dict)
     data_ready_at: datetime | None = None
-    use_synthetic_baseline: bool = False
+    use_synthetic_baseline: bool | None = None
     extras: dict[str, Any] = Field(default_factory=dict)
 
 
