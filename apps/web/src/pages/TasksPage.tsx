@@ -144,7 +144,7 @@ export function TasksPage() {
           <div className="field">
             <label>已发布本底版本（可选）</label>
             <select value={baselineVersionId} onChange={(e) => setBaselineVersionId(e.target.value)}>
-              <option value="">不指定。没有本底时只出提取水体</option>
+              <option value="">不指定。平台只绑定唯一的已发布本底；没有适用本底时只出提取水体</option>
               {publishedVersions.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.label}
