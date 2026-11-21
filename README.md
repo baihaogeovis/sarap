@@ -50,7 +50,7 @@ V1 UI/API roles are only `admin`, `duty_officer`, and `readonly`. The data model
 ## Permissions (v1 surface)
 
 - `admin` — manage org/project/members/scenes, run tasks, QC, publish and withdraw products, publish briefings.
-- `duty_officer` — create and run tasks, draft products, submit to QC, **perform QC and publish**, draft and publish briefings. Cannot manage members, configure scenes, or withdraw a published product.
+- `duty_officer` — create and run tasks, draft products, submit to QC, **perform QC and publish products**, and draft briefings. The default briefing is visible once a product is published. Publishing the briefing record needs `briefing.publish`, which the seeded admin has. Cannot manage members, configure scenes, or withdraw a published product.
 - `readonly` — published products and briefings, one-map, and task lists. Write actions are hidden or disabled with an explanation.
 
 ## Web workbench
@@ -93,7 +93,7 @@ docker compose --profile engine up --build
 
 Engine control plane (internal): http://localhost:8081 (`/health`). A background worker drains the queue and posts draft products back to the platform. If `SARAP_ENGINE_MODE=snap` and `gpt` is missing, jobs fail with `GPT_NOT_FOUND` and do not fall back to mock.
 
-After a mock run, publish the draft from 质检 / 发布, then open 一张图 and pick the area. The default map draws that area plus published inundation or extracted-water vectors only. Draft, pending QC, and withdrawn products stay off it. If the area has no published product, the map shows an empty state and does not invent a flood polygon. The geometry uses the area's stored analysis CRS and AOI. See [部署说明](docs/deployment.md).
+After a mock run, publish the draft from 质检 / 发布, then open 一张图 and 简报 and pick the area. The default map and the default briefing draw that area plus the published inundation or extracted-water vectors, together with roads, settlements, admin units, and the impact stats computed on the area analysis grid. Draft, pending QC, and withdrawn products stay off both. If the area has no published product, they show an empty state and do not invent a flood polygon or impact numbers. The demo area points impact objects at `fixture:public_validation_window` (a compact open-water window inspired by the public Sen1Floods11 Mekong chips, stored as local metres, not a domestic labeled AOI and not the Sen1Floods11 rasters). See [部署说明](docs/deployment.md).
 
 ### Option B — Dependencies in Compose, apps on the host
 

@@ -209,18 +209,100 @@ def write_polygons(
     return layers
 
 
-def write_thematic_png(out_dir: Path, class_map: np.ndarray) -> ProductLayer | None:
-    """P0 简易 PNG 预览。完整 GeoPDF 专题图为 P1，此处仅最小可运行实现。"""
+def _draw_overlay(draw, collection: dict[str, Any], grid, scale: int, color: tuple[int, int, int], width: int) -> None:
+    ox, resx, _, oy, _, resy = grid.affine()
+
+    def pixel(x: float, y: float) -> tuple[float, float]:
+        col = (x - ox) / resx
+        row = (y - oy) / resy
+        return col * scale, row * scale
+
+    for feature in collection.get("features") or []:
+        geometry = feature.get("geometry") or {}
+        kind = geometry.get("type")
+        coords = geometry.get("coordinates") or []
+        lines = []
+        if kind == "LineString":
+            lines = [coords]
+        elif kind == "MultiLineString":
+            lines = list(coords)
+        elif kind == "Polygon":
+            lines = list(coords)
+        elif kind == "MultiPolygon":
+            lines = [ring for polygon in coords for ring in polygon]
+        for line in lines:
+            if len(line) < 2:
+                continue
+            points = [pixel(float(pt[0]), float(pt[1])) for pt in line]
+            draw.line(points, fill=color, width=width)
+
+
+def write_thematic_png(
+    out_dir: Path,
+    class_map: np.ndarray,
+    grid,
+    *,
+    emergency: dict[str, Any] | None = None,
+    impact_layers: dict[str, Any] | None = None,
+) -> ProductLayer | None:
+    """Duty preview PNG: class grid, impact objects, and the key numbers.
+
+    GeoPDF stays out of this version. Chinese captions are in emergency_map.json
+    because the default bitmap font has no CJK glyphs.
+    """
     if not HAS_PIL:
         return None
-    h, w = class_map.shape
-    rgba = np.zeros((h, w, 4), dtype=np.uint8)
+    from PIL import ImageDraw
+
+    scale = 4
+    height, width = class_map.shape
+    small = np.zeros((height, width, 4), dtype=np.uint8)
     for code, color in CLASS_COLORS.items():
-        rgba[class_map == code] = color
-    img = Image.fromarray(rgba, mode="RGBA")
+        small[class_map == code] = color
+    rgba = np.repeat(np.repeat(small, scale, axis=0), scale, axis=1)
+    map_img = Image.fromarray(rgba, mode="RGBA")
+    draw = ImageDraw.Draw(map_img)
+    overlays = impact_layers or {}
+    if overlays.get("impact_admin_poly"):
+        _draw_overlay(draw, overlays["impact_admin_poly"], grid, scale, (232, 238, 242), 1)
+    if overlays.get("impact_settlement"):
+        _draw_overlay(draw, overlays["impact_settlement"], grid, scale, (201, 162, 39), 2)
+    if overlays.get("impact_road"):
+        _draw_overlay(draw, overlays["impact_road"], grid, scale, (215, 192, 122), 2)
+
+    panel_w = 280
+    canvas = Image.new("RGBA", (map_img.width + panel_w, max(map_img.height, 360)), (15, 26, 34, 255))
+    canvas.paste(map_img, (0, 0))
+    pen = ImageDraw.Draw(canvas)
+    summary = (emergency or {}).get("summary") or {}
+    configured = bool((emergency or {}).get("impact_configured"))
+    lines = [
+        (emergency or {}).get("basis_label") or "water",
+        f"area ha: {(emergency or {}).get('inundation_ha')}",
+        f"CRS {((emergency or {}).get('crs') or '')}",
+        f"{(emergency or {}).get('resolution_m') or 10} m",
+    ]
+    if configured:
+        lines.extend(
+            [
+                f"roads: {summary.get('affected_road_count')} / {summary.get('affected_road_length_m')} m",
+                f"settlements: {summary.get('affected_settlement_count')} / {summary.get('affected_settlement_area_ha')} ha",
+                f"admin: {summary.get('affected_admin_count')} / {summary.get('affected_admin_area_ha')} ha",
+            ]
+        )
+    lines.append("No water depth.")
+    y = 12
+    for line in lines:
+        pen.text((map_img.width + 12, y), str(line), fill=(232, 238, 242, 255))
+        y += 18
     path = out_dir / "thematic_map.png"
-    img.save(path)
-    return ProductLayer(name="thematic_map", uri=str(path), media_type="image/png", note="P0 简易预览，完整 GeoPDF 待 P1")
+    canvas.convert("RGB").save(path)
+    return ProductLayer(
+        name="thematic_map",
+        uri=str(path),
+        media_type="image/png",
+        note="应急专题图预览（PNG）。GeoPDF 不在本增量。",
+    )
 
 
 def package_product(
@@ -237,6 +319,8 @@ def package_product(
 ) -> ProductManifest:
     out_dir.mkdir(parents=True, exist_ok=True)
     has_baseline = metadata.flood_event_status != "baseline_missing"
+    impact_layers = dict(impact_stats.pop("impact_layers", None) or {})
+    emergency_map = impact_stats.pop("emergency_map", None)
     layers: list[ProductLayer] = []
     layers.extend(
         write_class_rasters(
@@ -264,7 +348,13 @@ def package_product(
             baseline_version_id=metadata.baseline_version_id,
         )
     )
-    png = write_thematic_png(out_dir, class_map)
+    for name, collection in impact_layers.items():
+        path = _write_json(out_dir / f"{name}.geojson", collection)
+        layers.append(_layer(name, path, "application/geo+json"))
+    if isinstance(emergency_map, dict):
+        emergency_path = _write_json(out_dir / "emergency_map.json", emergency_map)
+        layers.append(_layer("emergency_map", emergency_path, "application/json"))
+    png = write_thematic_png(out_dir, class_map, grid, emergency=emergency_map, impact_layers=impact_layers)
     if png is not None:
         layers.append(png)
 
@@ -277,12 +367,18 @@ def package_product(
     # CSV 面积表
     csv_path = out_dir / "impact_stats.csv"
     rows = impact_stats.get("metrics") or []
+    cross_rows = impact_stats.get("cross_stats") or []
     with csv_path.open("w", encoding="utf-8") as f:
-        f.write("metric,value,unit,label,scope\n")
+        f.write("object_type,object_id,object_name,metric,value,unit,scope\n")
         for r in rows:
             f.write(
-                f"{r.get('metric','')},{r.get('value','')},{r.get('unit','')},"
-                f"{r.get('label','')},{r.get('scope','')}\n"
+                f"extent,,{r.get('label','')},{r.get('metric','')},{r.get('value','')},"
+                f"{r.get('unit','')},{r.get('scope','')}\n"
+            )
+        for r in cross_rows:
+            f.write(
+                f"{r.get('object_type','')},{r.get('object_id','')},{r.get('object_name','')},"
+                f"{r.get('metric','')},{r.get('value','')},{r.get('unit','')},{r.get('scope','')}\n"
             )
     layers.append(_layer("impact_stats_csv", csv_path, "text/csv"))
 

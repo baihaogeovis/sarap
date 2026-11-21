@@ -77,7 +77,7 @@ QC flag bits (0–8) are defined in the defaults JSON (`URBAN`, `SHADOW`, `LAYOV
 
 Layers listed in the GIS spec section 9.3 (`class_map`, `flood_event`, `water_current`, `qc_flags`, polygons, optional `sigma0_vv_db`, `thematic_map`, `impact_stats`, `metadata`). Product type `SARAP_FLOOD_V1`. **No water-depth raster or depth class.**
 
-Impact objects, when the corresponding baseline/assets are published: `admin_county`, `admin_township`, `cropland`, `road`, `settlement`.
+Impact objects, when the job supplies geometries: `admin_county`, `admin_township`, `road`, `settlement`, and `cropland` when that asset is actually present. The mock demo uses `fixture:public_validation_window`. Statistics run on the area analysis grid at 10 m. Web Mercator is refused. Objects that were not configured are omitted rather than reported as zero.
 
 ## Plugins and modes
 

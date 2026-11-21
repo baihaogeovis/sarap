@@ -326,7 +326,11 @@ class Worker:
             task_id = self._platform_task_id(job_id)
             title = None
             if context.pilot and context.pilot.name:
-                title = f"{context.pilot.name}洪水淹没范围（Sentinel-1）"
+                status = manifest.metadata.flood_event_status if manifest.metadata else ""
+                if status == "baseline_missing":
+                    title = f"{context.pilot.name}提取水体范围（Sentinel-1）"
+                else:
+                    title = f"{context.pilot.name}洪水淹没范围（Sentinel-1）"
             ingest_resp = self.ingest_client.ingest(job_id, manifest, task_id=task_id, title=title)
             self._log_stage(job_id, "area_ingest", t_area)
             product_blob = json.loads(manifest.model_dump_json())

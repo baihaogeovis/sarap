@@ -176,3 +176,36 @@ def test_duty_sees_ingested_product_on_task_and_product_lists(client, db):
     match = next(row for row in listed.json()["data"] if row["id"] == task_id)
     assert match["status"] == "succeeded"
     assert match["progress"] == 100
+
+
+def test_engine_event_accepts_iso_timestamps(client, db):
+    duty = duty_headers(client)
+    _, project, area = demo_ids(db)
+    created = client.post(
+        "/api/v1/tasks",
+        headers=duty,
+        json={
+            "project_id": str(project.id),
+            "area_id": str(area.id),
+            "scene_code": "flood",
+            "task_type": "flood_pipeline",
+            "title": "时间戳回传",
+            "s1_product_id": "S1A_IW_GRDH_1SDV_20260701T100000_TIME",
+            "acquisition_start": "2026-07-01T10:00:00Z",
+        },
+    )
+    assert created.status_code == 201, created.text
+    task_id = created.json()["data"]["id"]
+    event = client.post(
+        f"/api/v1/internal/tasks/{task_id}/events",
+        headers=INTERNAL,
+        json={
+            "status": "succeeded",
+            "step": "succeeded",
+            "progress": 100,
+            "processed_at": "2026-07-01T12:00:00Z",
+            "data_ready_at": "2026-07-01T11:00:00Z",
+        },
+    )
+    assert event.status_code == 200, event.text
+    assert event.json()["data"]["processed_at"].startswith("2026-07-01T12:00:00")

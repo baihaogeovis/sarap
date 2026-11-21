@@ -122,6 +122,39 @@ def map_error_code(code: str | None) -> str:
     return code
 
 
+_EMBED_JSON_NAMES = {"emergency_map", "impact_stats"}
+
+
+def _embed_json(layer_uri: str, name: str) -> dict[str, Any] | None:
+    """Copy a small JSON sidecar into the ingest body so the platform need not share the work dir."""
+    if name not in _EMBED_JSON_NAMES or not layer_uri:
+        return None
+    path = Path(layer_uri)
+    if not path.is_file():
+        return None
+    try:
+        if path.stat().st_size > _MAX_EMBED_BYTES:
+            return None
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(doc, dict):
+        return None
+    return doc
+
+
+def _strip_depth_tree(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_depth_tree(item)
+            for key, item in value.items()
+            if not any(frag in str(key).lower() for frag in DEPTH_KEY_FRAGMENTS)
+        }
+    if isinstance(value, list):
+        return [_strip_depth_tree(item) for item in value]
+    return value
+
+
 def _embed_vector(layer_uri: str, media_type: str) -> dict[str, Any] | None:
     """Read a GeoJSON layer from the engine work dir for the ingest payload."""
     looks_geo = media_type == "application/geo+json" or str(layer_uri).endswith(".geojson")
@@ -288,6 +321,9 @@ class IngestClient:
             embedded = _embed_vector(layer.uri, layer.media_type)
             if embedded is not None:
                 layer_meta["geojson"] = embedded
+            document = _embed_json(layer.uri, layer.name)
+            if document is not None:
+                layer_meta["document"] = _strip_depth_tree(document)
             if layer_meta:
                 item["metadata_json"] = layer_meta
             artifacts.append(item)
@@ -331,6 +367,7 @@ class IngestClient:
             "s1_product_id": (metadata.s1_product_id if metadata else None) or "",
             "qc_warnings": qc_warnings,
             "lowconf_ha": lowconf,
+            "impact_stats": _strip_depth_tree(dict(manifest.impact_stats or {})),
         }
         if has_baseline:
             payload["water_current_ha"] = water_current

@@ -1,0 +1,126 @@
+{
+  "type": "FeatureCollection",
+  "name": "public_validation_window",
+  "coord_space": "local_window_m",
+  "window_m": {"width": 800, "height": 800, "res_m": 10},
+  "description": "Impact objects for an 800 m analysis window. Coordinates are metres east and south of the window's north-west corner on the area analysis grid. They are not longitude/latitude and not a domestic AOI. The west side is open water, the same pattern as the Sen1Floods11 Mekong chips where the extractor was strongest. No Sentinel-1 raster or hand label is stored here.",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "admin_county",
+        "object_id": "county-west",
+        "object_name": "开阔水体县",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [400, 0], [400, 800], [0, 800], [0, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "admin_county",
+        "object_id": "county-east",
+        "object_name": "干地县",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[400, 0], [800, 0], [800, 800], [400, 800], [400, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "admin_township",
+        "object_id": "township-river",
+        "object_name": "沿水乡镇",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [400, 0], [400, 400], [0, 400], [0, 0]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "admin_township",
+        "object_id": "township-dry",
+        "object_name": "干地乡镇",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[400, 400], [800, 400], [800, 800], [400, 800], [400, 400]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "road",
+        "object_id": "rd-cross",
+        "object_name": "穿水道路",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[200, 100], [260, 700]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "road",
+        "object_id": "rd-dry",
+        "object_name": "干地道路",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[520, 40], [760, 760]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "settlement",
+        "object_id": "st-flood",
+        "object_name": "临水居民点",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[190, 480], [270, 480], [270, 640], [190, 640], [190, 480]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "settlement",
+        "object_id": "st-dry",
+        "object_name": "干地居民点",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[540, 200], [700, 200], [700, 360], [540, 360], [540, 200]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "object_type": "settlement",
+        "object_id": "st-urban",
+        "object_name": "建成区居民点",
+        "parent_admin_code": ""
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[150, 220], [220, 220], [220, 320], [150, 320], [150, 220]]]
+      }
+    }
+  ]
+}

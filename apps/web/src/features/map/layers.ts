@@ -13,11 +13,12 @@ export type FeatureCollection = {
 export type LayerSpec = {
   id: string;
   title: string;
-  kind: "water" | "event" | "baseline" | "qc" | "other";
+  kind: "water" | "event" | "baseline" | "qc" | "admin" | "road" | "settlement" | "cropland" | "other";
   color: string;
   visible: boolean;
-  /** False draws an outline only, used for the area boundary. */
+  /** False draws an outline only, used for the area boundary and admin lines. */
   fill?: boolean;
+  strokeWidth?: number;
   geojson?: FeatureCollection;
 };
 
@@ -26,6 +27,10 @@ export const COLORS = {
   event: "#C45C26",
   baseline: "#4F8EA0",
   qc: "#C9A227",
+  admin: "#8AA0AC",
+  road: "#D7C07A",
+  settlement: "#C9A227",
+  cropland: "#8FA37A",
   other: "#8AA0AC",
 };
 
