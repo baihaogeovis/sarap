@@ -1,50 +1,74 @@
-
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ApiError, api, type Briefing } from "../api/client";
+import { ApiError, api, type Briefing, type BriefingDocument } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { BriefingSheet } from "../features/briefing/BriefingSheet";
 
 export function BriefingPage() {
   const { id = "" } = useParams();
   const { has } = useAuth();
   const [item, setItem] = useState<Briefing | null>(null);
+  const [document, setDocument] = useState<BriefingDocument | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.briefing(id).then(setItem).catch((err) => setError(err.message));
+    let cancelled = false;
+    api
+      .briefing(id)
+      .then((row) => {
+        if (!cancelled) setItem(row);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    api
+      .briefingDocument(id)
+      .then((doc) => {
+        if (!cancelled) setDocument(doc);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   async function publish() {
     try {
-      setItem(await api.publishBriefing(id));
+      const next = await api.publishBriefing(id);
+      setItem(next);
+      setDocument(await api.briefingDocument(id));
+      setError("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "发布失败");
     }
   }
 
-  if (!item && !error) return <p className="empty">加载简报…</p>;
-  if (!item) return <p className="error">{error}</p>;
-  const summary = String(item.content_json.summary ?? "");
+  if (!item && !document && !error) return <p className="empty">加载简报…</p>;
+  if (!item && !document) return <p className="error">{error}</p>;
 
   return (
     <>
       <p className="page-lead">
         <Link to="/briefings">返回简报列表</Link>
+        {item && (
+          <>
+            {" "}
+            · <span className={`status ${item.status}`}>{item.status}</span>
+          </>
+        )}
       </p>
-      <div className="card">
-        <h3>{item.title}</h3>
-        <p>
-          <span className={`status ${item.status}`}>{item.status}</span> · 场景 {item.scene_code || "—"}
-        </p>
-        <p>{summary}</p>
-        {item.status === "draft" && (
+      {document && <BriefingSheet document={document} />}
+      {item?.status === "draft" && (
+        <div className="btn-row">
           <button className="btn accent" type="button" disabled={!has("briefing.publish")} onClick={publish}>
             发布简报
           </button>
-        )}
-        {!has("briefing.publish") && item.status === "draft" && <p className="warn">当前角色无权执行该操作。</p>}
-        {error && <p className="error">{error}</p>}
-      </div>
+          {!has("briefing.publish") && <p className="warn">当前角色无权执行该操作。</p>}
+        </div>
+      )}
+      {error && <p className="error">{error}</p>}
     </>
   );
 }

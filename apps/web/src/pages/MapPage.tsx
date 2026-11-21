@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Area, type MapPayload } from "../api/client";
 import { MapView } from "../features/map/MapView";
 import { COLORS, collectionCenter, type FeatureCollection, type LayerSpec } from "../features/map/layers";
+import type { ImpactSummary } from "../api/client";
 import { listScenes } from "../scenes/registry";
 import "../scenes/flood";
 import { useProject } from "../shell/ProjectContext";
@@ -16,8 +17,19 @@ function geographicCenter(area: Area | undefined): [number, number] | null {
 
 function colorFor(kind: LayerSpec["kind"]): string {
   if (kind === "event") return COLORS.event;
+  if (kind === "baseline") return COLORS.baseline;
   if (kind === "qc") return COLORS.qc;
-  return COLORS.water;
+  if (kind === "admin") return COLORS.admin;
+  if (kind === "road") return COLORS.road;
+  if (kind === "settlement") return COLORS.settlement;
+  if (kind === "cropland") return COLORS.cropland;
+  if (kind === "water") return COLORS.water;
+  return COLORS.other;
+}
+
+function formatHa(value: number | null | undefined): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  return `${value} ha`;
 }
 
 export function MapPage() {
@@ -100,9 +112,10 @@ export function MapPage() {
         id,
         title: layer.title,
         kind: layer.kind,
-        color: layer.kind === "other" ? COLORS.other : colorFor(layer.kind),
+        color: colorFor(layer.kind),
         visible: hidden[id] !== true,
-        fill: true,
+        fill: layer.fill !== false && layer.kind !== "admin" && layer.kind !== "road",
+        strokeWidth: layer.kind === "road" ? 3 : layer.kind === "admin" ? 2 : undefined,
         geojson: layer.geojson as FeatureCollection,
       });
     }
@@ -178,7 +191,65 @@ export function MapPage() {
           </label>
         ))}
       </div>
-      <MapView layers={layers} center={center} fitToken={fitToken} notice={notice} />
+      <div className="map-layout">
+        <MapView layers={layers} center={center} fitToken={fitToken} notice={notice} />
+        <ImpactCard product={product} />
+      </div>
     </>
+  );
+}
+
+function ImpactCard({ product }: { product: { title: string; flood_event_status: string; flood_event_ha?: number | null; extracted_water_ha?: number | null; water_current_ha?: number | null; impact?: ImpactSummary; impact_including_lowconf?: ImpactSummary } | null }) {
+  if (!product) {
+    return (
+      <aside className="card stats-card">
+        <h3>应急图</h3>
+        <p className="hint">没有已发布产品。这里不显示淹没面积，也不编造影响对象。</p>
+      </aside>
+    );
+  }
+  const impact = product.impact;
+  const low = product.impact_including_lowconf;
+  const inundationLabel = product.flood_event_status === "computed" ? "本次淹没" : "提取水体（未扣本底）";
+  const inundation = product.flood_event_status === "computed" ? product.flood_event_ha : product.extracted_water_ha ?? product.water_current_ha;
+  const extraSettlements =
+    impact?.impact_configured && low?.impact_configured
+      ? (low.affected_settlement_count ?? 0) - (impact.affected_settlement_count ?? 0)
+      : 0;
+  return (
+    <aside className="card stats-card">
+      <h3>应急图</h3>
+      <p className="hint">{product.title}</p>
+      <div className="stat-row">
+        <span>{inundationLabel}</span>
+        <strong>{formatHa(inundation)}</strong>
+      </div>
+      {impact?.impact_configured ? (
+        <>
+          <div className="stat-row">
+            <span>受影响道路</span>
+            <strong>
+              {impact.affected_road_count ?? 0} 条 / {impact.affected_road_length_m ?? 0} m
+            </strong>
+          </div>
+          <div className="stat-row">
+            <span>受影响居民点</span>
+            <strong>
+              {impact.affected_settlement_count ?? 0} 个 / {formatHa(impact.affected_settlement_area_ha)}
+            </strong>
+          </div>
+          <div className="stat-row">
+            <span>受影响行政区</span>
+            <strong>
+              {impact.affected_admin_count ?? 0} 个 / {formatHa(impact.affected_admin_area_ha)}
+            </strong>
+          </div>
+          {extraSettlements > 0 && <p className="hint">含低置信范围时另有居民点 {extraSettlements} 个。</p>}
+        </>
+      ) : (
+        <p className="hint">这份产品没有道路、居民点或行政区交叉统计。</p>
+      )}
+      <p className="hint">统计基于雷达提取范围，建成区可能低估，不含水深和人口。分析用区域坐标系，地图只展示经纬度。</p>
+    </aside>
   );
 }

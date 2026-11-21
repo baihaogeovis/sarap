@@ -120,6 +120,13 @@ def build_engine_payload(db: Session, task: Task) -> dict:
             pilot["algo_profile_id"] = payload["algo_profile_id"]
         if isinstance(config.get("overrides"), dict):
             pilot["overrides"] = config["overrides"]
+        assets = config.get("impact_assets")
+        if isinstance(assets, dict):
+            pilot["impact_assets"] = {
+                key: value
+                for key, value in assets.items()
+                if key in {"admin_county", "admin_township", "road", "settlement", "cropland"} and value
+            }
         if config.get("suggested_target_minutes"):
             pilot["suggested_target_minutes"] = config["suggested_target_minutes"]
         payload["pilot"] = pilot
@@ -260,6 +267,19 @@ def find_by_idempotency(db: Session, org_id, key: str | None) -> Task | None:
     )
 
 
+def _as_utc(value):
+    """Accept a datetime or an ISO-8601 string. SQLite will not coerce the string."""
+    if value is None or isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        text = value.strip().replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    return None
+
+
 def apply_event(db: Session, task: Task, payload: dict) -> Task:
     """Engine / service callback: update status, progress, and UTC time fields."""
     if "progress" in payload:
@@ -275,9 +295,9 @@ def apply_event(db: Session, task: Task, payload: dict) -> Task:
     if payload.get("error_message"):
         task.error_message = str(payload["error_message"])
     if payload.get("data_ready_at"):
-        task.data_ready_at = payload["data_ready_at"]
+        task.data_ready_at = _as_utc(payload["data_ready_at"])
     if payload.get("processed_at"):
-        task.processed_at = payload["processed_at"]
+        task.processed_at = _as_utc(payload["processed_at"])
     if "status" in payload and payload["status"] in {"queued", "running", "succeeded", "failed", "cancelled"}:
         task.status = payload["status"]
     if task.error_code in HARD_ERROR_CODES and task.status not in {"failed", "cancelled"}:

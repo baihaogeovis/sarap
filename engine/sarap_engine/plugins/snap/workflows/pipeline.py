@@ -16,6 +16,7 @@ from sarap_engine.algo.area import area_stats
 from sarap_engine.algo.change import classify_with_baseline, classify_without_baseline
 from sarap_engine.algo.extract import extract_water
 from sarap_engine.algo.grid import GridMisaligned, GridSpec, assert_grids_aligned
+from sarap_engine.algo.impact import build_emergency_map, load_impact_objects, overlay_impacts
 from sarap_engine.algo.qc import apply_risk_downgrade, flag_area_ha
 from sarap_engine.constants import (
     AREA_LIMITATION,
@@ -214,21 +215,51 @@ def build_impact_stats(
     res_m: float,
     has_baseline: bool,
     impact_asset_types: list[str],
+    grid: GridSpec | None = None,
+    impact_assets: Any = None,
+    area_name: str = "",
+    baseline_version_id: str | None = None,
+    acquisition_start: str | None = None,
 ) -> dict[str, Any]:
     areas = area_stats(class_map, res_m=res_m, has_baseline=has_baseline)
-    configured = [t for t in impact_asset_types if t in {"admin_county", "admin_township", "road", "settlement"}]
-    # 耕地是扩展，有配置也可列入，但不因缺失而虚报
-    if "cropland" in impact_asset_types:
-        # 仍不自动出空壳；仅当真正跑了交叉才写。此处未实现空间叠加，故不写耕地指标。
-        pass
+    configured = [
+        item
+        for item in impact_asset_types
+        if item in {"admin_county", "admin_township", "road", "settlement", "cropland"}
+    ]
     cross: list[dict[str, Any]] = []
-    if configured:
-        note = (
-            "已配置影响对象，但本版本交叉叠加（行政区/道路/居民点）为 P1，"
-            "当前空跑只给出面积，不虚报交叉指标。"
-        )
-    else:
-        note = NO_IMPACT_ASSETS_NOTE
+    layers: dict[str, Any] = {}
+    note = NO_IMPACT_ASSETS_NOTE
+    if configured and grid is not None:
+        objects, loaded_note = load_impact_objects(impact_assets, grid)
+        if objects:
+            cross, layers = overlay_impacts(
+                class_map,
+                objects,
+                grid,
+                res_m=res_m,
+                has_baseline=has_baseline,
+                baseline_version_id=baseline_version_id,
+            )
+            note = loaded_note or "已在分析网格上叠加道路、居民点与行政区。"
+        else:
+            note = loaded_note or "已配置影响对象，但没有可叠加的几何，不出交叉结论。"
+    elif configured:
+        note = "已配置影响对象，但缺少分析网格，不出交叉结论。"
+    water_layer = "flood_event_poly" if has_baseline else "water_current_poly"
+    layer_names = [water_layer, *layers.keys()]
+    emergency = build_emergency_map(
+        area_name=area_name,
+        crs=grid.crs if grid is not None else "",
+        res_m=res_m,
+        has_baseline=has_baseline,
+        impact_configured=bool(cross or layers),
+        cross_stats=cross,
+        areas=areas,
+        acquisition_start=acquisition_start,
+        baseline_version_id=baseline_version_id,
+        layer_names=layer_names,
+    )
     return {
         "metrics": areas["metrics"],
         "limitation": AREA_LIMITATION,
@@ -241,6 +272,8 @@ def build_impact_stats(
         "water_current_ha": areas.get("water_current_ha"),
         "flood_event_ha": areas.get("flood_event_ha"),
         "lowconf_ha": areas.get("lowconf_ha"),
+        "impact_layers": layers,
+        "emergency_map": emergency,
     }
 
 
@@ -338,11 +371,20 @@ def run_postprocess(
     extract_result = run_extract(prep, context.profile)
     qc_result = run_qc(extract_result, context.profile, prep)
     change_result = run_change(context, prep, qc_result)
+    acq = None
+    if context.scene.acquisition_start is not None:
+        acq = _utc(context.scene.acquisition_start)
+        acq = acq.isoformat() if acq is not None else None
     impact = build_impact_stats(
         change_result.class_map,
         res_m=context.profile.snap.pixel_spacing_m,
         has_baseline=change_result.has_baseline,
         impact_asset_types=context.pilot.impact_assets.configured_types(),
+        grid=prep.grid,
+        impact_assets=context.pilot.impact_assets,
+        area_name=context.pilot.name,
+        baseline_version_id=context.baseline_version_id,
+        acquisition_start=acq,
     )
     processed_at = datetime.now(timezone.utc)
     qc_summary = build_qc_summary(

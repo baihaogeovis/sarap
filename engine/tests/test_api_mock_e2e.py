@@ -198,6 +198,51 @@ def test_mock_e2e_with_baseline(tmp_path):
     assert "未配置影响对象" in impact["cross_stats_note"]
 
 
+def test_mock_e2e_with_public_validation_impacts(tmp_path):
+    transport = _IngestHandler()
+    app, _ = _app(tmp_path, ingest_transport=transport)
+    client = TestClient(app)
+    payload = _payload(with_baseline=True)
+    payload["pilot"]["impact_assets"] = {
+        "admin_county": "fixture:public_validation_window",
+        "admin_township": "fixture:public_validation_window",
+        "road": "fixture:public_validation_window",
+        "settlement": "fixture:public_validation_window",
+    }
+    resp = client.post("/internal/engine/jobs", json=payload)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["status"] == "succeeded", data.get("error_message")
+    impact = data["product"]["impact_stats"]
+    assert impact["cross_stats"]
+    assert "未配置影响对象" not in impact["cross_stats_note"]
+    roads = [row for row in impact["cross_stats"] if row["object_id"] == "rd-cross" and row["metric"] == "affected_length_m"]
+    assert roads and roads[0]["value"] > 0
+    assert all(row["object_id"] != "rd-dry" for row in impact["cross_stats"])
+    names = {layer["name"] for layer in data["product"]["layers"]}
+    assert "impact_road" in names
+    assert "impact_settlement" in names
+    assert "impact_admin_poly" in names
+    assert "emergency_map" in names
+    assert "thematic_map" in names
+    road = next(layer for layer in data["product"]["layers"] if layer["name"] == "impact_road")
+    features = json.loads(Path(road["uri"]).read_text(encoding="utf-8"))["features"]
+    flat = [value for feature in features for pt in feature["geometry"]["coordinates"] for value in pt]
+    assert any(abs(value) > 90 for value in flat)
+    body = next(call["body"] for call in transport.calls if call["path"].endswith("/products"))
+    assert body["impact_stats"]["cross_stats"]
+    assert body["flood_event_status"] == "computed"
+    embedded = next(item for item in body["artifacts_json"] if item["layer_key"] == "impact_road")
+    assert embedded["metadata_json"]["geojson"]["features"]
+    assert embedded["metadata_json"]["crs"] == "EPSG:4548"
+    emergency = next(item for item in body["artifacts_json"] if item["layer_key"] == "emergency_map")
+    assert emergency["metadata_json"]["document"]["impact_configured"] is True
+    assert emergency["metadata_json"]["document"]["basis_label"] == "本次淹没"
+    blob = json.dumps(body)
+    assert "water_depth" not in blob
+    assert "flood_depth" not in blob
+
+
 def test_snap_mode_without_gpt_via_api(tmp_path):
     app, _ = _app(tmp_path)
     client = TestClient(app)

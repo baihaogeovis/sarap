@@ -15,6 +15,7 @@ dependencies = [
   "numpy>=2.0",
   "python-multipart>=0.0.9",
   "pyproj>=3.6",
+  "pillow>=10.0",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +46,7 @@ include = ["sarap_engine*"]
 sarap_engine = [
   "plugins/snap/graphs/*.j2",
   "domain/data/*.json",
+  "fixtures/*.geojson",
 ]
 
 [tool.pytest.ini_options]

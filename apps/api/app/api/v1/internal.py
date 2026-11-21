@@ -92,6 +92,8 @@ def ingest_product(body: InternalProductIn, db: Session = Depends(get_db)):
     db.flush()
     product_service.sync_layers(db, row, body.artifacts_json)
     product_service.sync_area_stats(db, row)
+    impact_doc = body.impact_stats or product_service.impact_document_from_artifacts(body.artifacts_json)
+    product_service.sync_cross_stats(db, row, impact_doc)
     # QC warnings never block P0 ingest/publishability.
     task.status = "succeeded"
     task.progress = 100

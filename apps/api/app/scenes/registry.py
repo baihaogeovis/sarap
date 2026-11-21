@@ -75,6 +75,13 @@ DEMO_PILOT_CONFIG: dict[str, Any] = {
         "buffer_km": 2,
     },
     "suggested_target_minutes": 240,
+    # Compact public-validation window shipped with the engine. Not a domestic AOI.
+    "impact_assets": {
+        "admin_county": "fixture:public_validation_window",
+        "admin_township": "fixture:public_validation_window",
+        "road": "fixture:public_validation_window",
+        "settlement": "fixture:public_validation_window",
+    },
 }
 
 _REGISTRY = {"flood": FLOOD_MANIFEST}

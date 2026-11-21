@@ -48,7 +48,7 @@ pip install -e ".[geo]"
 # 即 rasterio / geopandas / shapely / scikit-image（需要系统 GDAL 时可能失败）
 ```
 
-没有 rasterio 时，栅格以 `npy` + `*.grid.json` 侧车写出，算法单测仍用纯 numpy，不依赖 SNAP / GDAL。有 rasterio 则写 GeoTIFF。简易专题图 PNG 使用 Pillow（若可用）；完整 GeoPDF 专题图为 P1，本版只提供最小 PNG 预览。
+没有 rasterio 时，栅格以 `npy` + `*.grid.json` 侧车写出，算法单测仍用纯 numpy，不依赖 SNAP / GDAL。有 rasterio 则写 GeoTIFF。应急图 PNG 使用 Pillow，旁路写 `emergency_map.json`（标题、面积、影响统计和限制说明）。完整 GeoPDF 仍未做。
 
 ## 启动 API
 
@@ -177,7 +177,7 @@ accepted → queued → preparing → snap_running → extracting
 
 ## 已知限制与未做完的部分
 
-- 完整 GeoPDF 应急专题图、道路/行政区/居民点空间交叉统计为 P1，当前只留接口与面积表；未配置对象时不会出空壳指标。
+- 道路、居民点、行政区的交叉统计在分析网格上计算。任务的 `impact_assets` 指向 `fixture:public_validation_window` 或一份带 CRS 的 GeoJSON 时才会出数；未配置、几何读不到、或分析坐标系是 Web Mercator / 地理坐标时不出交叉结论，也不补空壳指标。应急图是 PNG 预览加 `emergency_map.json`，完整 GeoPDF 仍未做。
 - 矢量化在无 shapely 时用连通域外接矩形写出 GeoJSON，便于测试，不是生产级拓扑修复。
 - SNAP 多波段输出（VH、入射角、DEM）的完整波段名适配，需在已安装 SNAP + rasterio 的环境继续完善；无 gpt 时生产路径会明确失败。
 - 引擎不发布产品，不输出水深。
