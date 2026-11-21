@@ -43,7 +43,7 @@ SARAP 是一套可复用的多场景 SAR 应用平台。第一版同时交付两
 
 - 平台 API（`apps/api`）：FastAPI。`GET /products/map` 和 `GET /briefings/preview` 只使用所选区域的已发布产品，并把矢量从该区域的 `analysis_crs` 转到 `EPSG:4326`。交叉统计写在 `impact_stats`，没有配置对象时不补空行。
 - 前端作业台（`apps/web`）：Vite + React + TypeScript + OpenLayers 10。值班员可以选区域、已入仓影像和已发布本底，创建洪水任务。一张图和简报按所选区域显示已发布范围、影响对象和统计。
-- 处理引擎（`engine`）：独立包，带 `Dockerfile`。mock 通路可跑通，并由后台 worker 消费队列。mock 会把合成窗口放到区域 AOI 的分析网格上。演示区域把影响对象指到仓内小夹具 `fixture:public_validation_window`（800 m 窗口，西侧开阔水体，坐标是相对窗口西北角的米，不是国内标注场景，也不含 Sen1Floods11 栅格）。叠加在分析坐标系的 10 m 网格上完成，再把 GeoJSON 随内部入库接口回传。SNAP 模式若找不到 `gpt`，以 `GPT_NOT_FOUND` 失败，不会偷偷改走 mock。专题图目前是 PNG 预览加 JSON 说明，不是 GeoPDF。
+- 处理引擎（`engine`）：独立包，带 `Dockerfile`。mock 通路可跑通，并由后台 worker 消费队列。mock 会把合成窗口放到区域 AOI 的分析网格中部。演示区域把影响对象指到仓内小夹具 `fixture:public_validation_window`（800 m 窗口，西侧开阔水体，坐标是相对窗口西北角的米，不是国内标注场景，也不含 Sen1Floods11 栅格）。任务引用已发布本底且没有真实栅格时，mock 用这扇窗口做变化检测：本次淹没 6.75 ha，当期水体 17.75 ha，`flood_event_status=computed`。不引用本底时只有提取水体 18.95 ha，状态为 `baseline_missing`。叠加在分析坐标系的 10 m 网格上完成，再把 GeoJSON 随内部入库接口回传。SNAP 模式若找不到 `gpt`，以 `GPT_NOT_FOUND` 失败，不会偷偷改走 mock。专题图目前是 PNG 预览加 JSON 说明，不是 GeoPDF。
 
 更细的模块划分见 [架构说明](architecture.md)，待办见 [TODO](TODO.md)，本地与部署步骤见 [部署说明](deployment.md)。
 

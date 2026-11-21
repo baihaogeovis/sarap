@@ -238,6 +238,8 @@ export type MapPayload = {
     title: string;
     status: string;
     flood_event_status: string;
+    baseline_version?: string;
+    baseline_version_id?: string | null;
     version: number;
     scene_code: string;
     extracted_water_ha?: number | null;
@@ -270,6 +272,8 @@ export type BriefingDocument = {
     published_at: string | null;
     acquisition_start: string | null;
     s1_product_id: string;
+    baseline_version?: string;
+    baseline_version_id?: string | null;
   } | null;
   omitted_product_ids: string[];
   stats: ImpactSummary & {
