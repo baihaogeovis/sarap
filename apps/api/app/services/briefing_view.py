@@ -129,6 +129,8 @@ def compose_product_view(
             "published_at": product.published_at.isoformat() if product.published_at else None,
             "acquisition_start": product.acquisition_start.isoformat() if product.acquisition_start else None,
             "s1_product_id": product.s1_product_id,
+            "baseline_version": product.baseline_version or "",
+            "baseline_version_id": str(product.baseline_version_id) if product.baseline_version_id else None,
         },
         "omitted_product_ids": omitted_product_ids,
         "stats": {

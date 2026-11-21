@@ -94,6 +94,17 @@ def resolve_mock_window_origin(
     span_x = width * res
     span_y = height * res
     ox, oy = float(grid_origin_x), float(grid_origin_y)
+    # A geographic rectangle is not a rectangle after projection. Anchoring the
+    # window on the bbox north-west corner can leave the open-water side
+    # outside the AOI. Center the window when it fits, so the demo patch sits
+    # on the area.
+    if maxx - minx >= span_x and maxy - miny >= span_y:
+        cx = (minx + maxx) / 2.0
+        cy = (miny + maxy) / 2.0
+        west = _snap_floor(cx - span_x / 2.0, ox, res)
+        north = _snap_ceil(cy + span_y / 2.0, oy, res)
+        if _intersects(west, north, span_x, span_y, minx, miny, maxx, maxy):
+            return west, north
     west = _snap_ceil(minx, ox, res)
     north = _snap_floor(maxy, oy, res)
     if not _intersects(west, north, span_x, span_y, minx, miny, maxx, maxy):
