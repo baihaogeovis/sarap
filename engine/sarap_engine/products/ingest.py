@@ -324,6 +324,13 @@ class IngestClient:
             document = _embed_json(layer.uri, layer.name)
             if document is not None:
                 layer_meta["document"] = _strip_depth_tree(document)
+            display = layer.extra.get("display") if isinstance(layer.extra, dict) else None
+            if isinstance(display, dict) and isinstance(display.get("pixels_b64"), str):
+                if len(display["pixels_b64"]) <= _MAX_EMBED_BYTES:
+                    layer_meta["display"] = display
+            pdf_b64 = layer.extra.get("pdf_b64") if isinstance(layer.extra, dict) else None
+            if isinstance(pdf_b64, str) and len(pdf_b64) <= _MAX_EMBED_BYTES:
+                layer_meta["pdf_b64"] = pdf_b64
             if layer_meta:
                 item["metadata_json"] = layer_meta
             artifacts.append(item)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Area, type MapPayload } from "../api/client";
-import { MapView } from "../features/map/MapView";
+import { api, apiBase, type Area, type MapPayload, type MapRasterLayer } from "../api/client";
+import { MapView, type RasterSpec } from "../features/map/MapView";
 import { COLORS, collectionCenter, type FeatureCollection, type LayerSpec } from "../features/map/layers";
 import type { ImpactSummary } from "../api/client";
 import { listScenes } from "../scenes/registry";
@@ -25,6 +25,13 @@ function colorFor(kind: LayerSpec["kind"]): string {
   if (kind === "cropland") return COLORS.cropland;
   if (kind === "water") return COLORS.water;
   return COLORS.other;
+}
+
+function rasterBounds(raster: MapRasterLayer): [number, number, number, number] | null {
+  const [minx, miny, maxx, maxy] = raster.bounds ?? [];
+  if (![minx, miny, maxx, maxy].every((value) => Number.isFinite(value))) return null;
+  if (Math.abs(minx) > 180 || Math.abs(maxx) > 180 || Math.abs(miny) > 90 || Math.abs(maxy) > 90) return null;
+  return [minx, miny, maxx, maxy];
 }
 
 function formatHa(value: number | null | undefined): string {
@@ -92,6 +99,25 @@ export function MapPage() {
   const product = payload?.products.find((item) => item.id === productId) ?? null;
   const analysisCrs = payload?.area.analysis_crs || area?.analysis_crs || "";
 
+  const rasterKinds = useMemo(() => new Set((product?.rasters ?? []).map((raster) => raster.kind)), [product]);
+
+  const rasters = useMemo<RasterSpec[]>(() => {
+    return (product?.rasters ?? []).flatMap((raster) => {
+      const bounds = rasterBounds(raster);
+      if (!bounds) return [];
+      const id = `${product?.id}:raster:${raster.layer_key}`;
+      return [
+        {
+          id,
+          title: raster.title,
+          visible: hidden[id] !== true,
+          url: `${apiBase()}${raster.tile_template}`,
+          bounds,
+        },
+      ];
+    });
+  }, [product, hidden]);
+
   const layers = useMemo<LayerSpec[]>(() => {
     const specs: LayerSpec[] = [];
     const aoi = payload?.area.aoi;
@@ -107,6 +133,9 @@ export function MapPage() {
       });
     }
     for (const layer of product?.layers ?? []) {
+      if (rasterKinds.has(layer.kind) && (layer.kind === "water" || layer.kind === "event" || layer.kind === "baseline")) {
+        continue;
+      }
       const id = `${product?.id}:${layer.layer_key}:${layer.kind}`;
       specs.push({
         id,
@@ -120,7 +149,7 @@ export function MapPage() {
       });
     }
     return specs;
-  }, [payload, product, hidden]);
+  }, [payload, product, hidden, rasterKinds]);
 
   const center = useMemo<[number, number]>(() => {
     return (
@@ -135,14 +164,16 @@ export function MapPage() {
   else if (phase === "loading") notice = "正在读取已发布产品…";
   else if (phase === "error") notice = error;
   else if (!payload?.products.length) notice = "该区域没有已发布产品。默认一张图只显示已发布范围。";
-  else if (product && product.layers.length === 0) notice = "这份已发布产品没有可显示的范围图层。";
+  else if (product && product.layers.length === 0 && (product.rasters ?? []).length === 0) {
+    notice = "这份已发布产品没有可显示的范围图层。";
+  }
 
-  const fitToken = `${areaId}:${productId}:${layers.map((layer) => layer.id).join(",")}`;
+  const fitToken = `${areaId}:${productId}:${layers.map((layer) => layer.id).join(",")}:${rasters.map((raster) => raster.id).join(",")}`;
 
   return (
     <>
       <p className="page-lead">
-        一张图显示所选区域，以及该区域已发布的洪水产品范围。草稿、待质检和已撤回的产品不会出现在默认图上。没有已发布产品时只保留区域范围，不编造淹没面。本底水体用水色，本次淹没用强调色。不展示水深。
+        一张图显示所选区域，以及该区域已发布的洪水产品。有栅格时，淹没、提取水体和本底按分析网格铺成瓦片，放大后仍对齐 10 m 像元。没有栅格的旧产品继续画矢量。草稿、待质检和已撤回不出现在默认图上。不展示水深。
       </p>
       <div className="btn-row" style={{ marginBottom: 12 }}>
         <label className="hint">
@@ -180,6 +211,16 @@ export function MapPage() {
           </select>
         </label>
         {analysisCrs && <span className="hint">分析坐标系 {analysisCrs}</span>}
+        {rasters.map((raster) => (
+          <label key={raster.id} className="hint">
+            <input
+              type="checkbox"
+              checked={raster.visible}
+              onChange={() => setHidden((curr) => ({ ...curr, [raster.id]: raster.visible }))}
+            />{" "}
+            {raster.title}
+          </label>
+        ))}
         {layers.map((layer) => (
           <label key={layer.id} className="hint">
             <input
@@ -192,14 +233,29 @@ export function MapPage() {
         ))}
       </div>
       <div className="map-layout">
-        <MapView layers={layers} center={center} fitToken={fitToken} notice={notice} />
+        <MapView
+          layers={layers}
+          rasters={rasters}
+          center={center}
+          fitToken={fitToken}
+          notice={notice}
+          sampleAt={
+            product
+              ? async (lon, lat) => {
+                  const found = await api.identify(product.id, lon, lat);
+                  return found.hits.map((hit) => hit.title);
+                }
+              : undefined
+          }
+        />
         <ImpactCard product={product} />
       </div>
     </>
   );
 }
 
-function ImpactCard({ product }: { product: { title: string; flood_event_status: string; baseline_version?: string; flood_event_ha?: number | null; extracted_water_ha?: number | null; water_current_ha?: number | null; impact?: ImpactSummary; impact_including_lowconf?: ImpactSummary } | null }) {
+function ImpactCard({ product }: { product: { id?: string; title: string; flood_event_status: string; baseline_version?: string; flood_event_ha?: number | null; extracted_water_ha?: number | null; water_current_ha?: number | null; impact?: ImpactSummary; impact_including_lowconf?: ImpactSummary; geopdf_path?: string | null } | null }) {
+  const [pdfError, setPdfError] = useState("");
   if (!product) {
     return (
       <aside className="card stats-card">
@@ -263,7 +319,22 @@ function ImpactCard({ product }: { product: { title: string; flood_event_status:
       ) : (
         <p className="hint">这份产品没有道路、居民点或行政区交叉统计。</p>
       )}
-      <p className="hint">统计基于雷达提取范围，建成区可能低估，不含水深和人口。分析用区域坐标系，地图只展示经纬度。</p>
+      <p className="hint">统计基于雷达提取范围，建成区可能低估，不含水深和人口。分析用区域坐标系，地图瓦片只用于展示。</p>
+      {product.geopdf_path ? (
+        <button
+          className="btn"
+          type="button"
+          onClick={() => {
+            setPdfError("");
+            api.download(product.geopdf_path || "", "emergency-map.pdf").catch(() => setPdfError("GeoPDF 下载失败"));
+          }}
+        >
+          下载 GeoPDF
+        </button>
+      ) : (
+        <p className="hint">这份已发布产品没有 GeoPDF。</p>
+      )}
+      {pdfError && <p className="error">{pdfError}</p>}
     </aside>
   );
 }

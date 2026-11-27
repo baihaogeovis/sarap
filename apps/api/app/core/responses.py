@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -17,6 +17,29 @@ def err(code: str, message: str, status_code: int, details: Any = None) -> JSONR
         {"data": None, "error": {"code": code, "message": message, "details": details}, "meta": {}},
         status_code=status_code,
     )
+
+
+def bytes_response(request: Request, data: bytes, media_type: str, filename: str | None = None) -> Response:
+    """Full body, or one byte range. Used for COG and GeoPDF downloads."""
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=60"}
+    if filename:
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    raw = request.headers.get("range")
+    if raw and raw.startswith("bytes="):
+        piece = raw.split("=", 1)[1].split(",", 1)[0].strip()
+        start_text, _, end_text = piece.partition("-")
+        try:
+            start = int(start_text) if start_text else 0
+            end = int(end_text) if end_text else len(data) - 1
+        except ValueError as exc:
+            raise APIError(416, "range_not_satisfiable", "Invalid range") from exc
+        end = min(end, len(data) - 1)
+        if start < 0 or start > end or start >= len(data):
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{len(data)}"})
+        chunk = data[start : end + 1]
+        headers["Content-Range"] = f"bytes {start}-{end}/{len(data)}"
+        return Response(content=chunk, status_code=206, media_type=media_type, headers=headers)
+    return Response(content=data, media_type=media_type, headers=headers)
 
 
 class APIError(Exception):

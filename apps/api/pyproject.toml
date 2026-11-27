@@ -16,6 +16,7 @@ dependencies = [
   "psycopg[binary]>=3.2",
   "shapely>=2.0",
   "pyproj>=3.6",
+  "numpy>=2.0",
 ]
 
 [project.optional-dependencies]

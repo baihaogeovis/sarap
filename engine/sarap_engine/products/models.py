@@ -17,6 +17,8 @@ class ProductLayer(BaseModel):
     role: str | None = None
     empty: bool = False
     note: str | None = None
+    # Ingest-only payload (display pixels, GeoPDF bytes). Kept off the job JSON.
+    extra: dict[str, Any] = Field(default_factory=dict, exclude=True)
 
 
 class ProductMetadata(BaseModel):

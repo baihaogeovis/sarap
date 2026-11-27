@@ -15,6 +15,7 @@ from pyproj.exceptions import CRSError
 from sqlalchemy.orm import Session
 
 from app.models import Area, ImpactStat, Product, ProductLayer
+from app.services.display_raster import bounds_4326, decode_display
 
 DISPLAY_CRS = "EPSG:4326"
 _GEOGRAPHIC = {"EPSG:4326", "EPSG:4490", "CRS84", "OGC:CRS84"}
@@ -288,6 +289,95 @@ def summarize_impact(rows: list[ImpactStat], scope: str = "default") -> dict[str
     return summary
 
 
+_RASTER_ORDER = (
+    ("baseline_water", "本底水体", "baseline"),
+    ("flood_event", "本次淹没", "event"),
+    ("water_current", "提取水体（未扣本底）", "water"),
+)
+
+
+def raster_layers_for(db: Session, product: Product) -> list[dict[str, Any]]:
+    """Display rasters the one-map can tile. Empty when the product has no embedded pixels.
+
+    With a baseline, water_current is the whole water mask and is not painted as one color.
+    The split baseline / flood rasters carry that case. Without a baseline, water_current
+    is the extracted-water display.
+    """
+    keys = [item[0] for item in _RASTER_ORDER]
+    if product.flood_event_status == "computed":
+        keys = [key for key in keys if key != "water_current"]
+    else:
+        keys = [key for key in keys if key != "flood_event" and key != "baseline_water"]
+    rows = (
+        db.query(ProductLayer)
+        .filter(ProductLayer.product_id == product.id, ProductLayer.layer_key.in_(keys))
+        .all()
+    )
+    by_key = {row.layer_key: row for row in rows}
+    layers: list[dict[str, Any]] = []
+    for key, title, kind in _RASTER_ORDER:
+        if key not in keys:
+            continue
+        layer = by_key.get(key)
+        if layer is None:
+            continue
+        decoded = decode_display(layer.metadata_json or {})
+        if decoded is None:
+            continue
+        _rgba, display = decoded
+        bounds = bounds_4326(display)
+        if bounds is None:
+            continue
+        product_id = str(product.id)
+        layers.append(
+            {
+                "layer_key": key,
+                "title": title,
+                "kind": kind,
+                "tile_template": f"/products/{product_id}/layers/{key}/tiles/{{z}}/{{x}}/{{y}}.png",
+                "cog_path": f"/products/{product_id}/layers/{key}/cog",
+                "bounds": [round(value, 6) for value in bounds],
+            }
+        )
+    return layers
+
+
+def geopdf_path_for(db: Session, product: Product) -> str | None:
+    layer = (
+        db.query(ProductLayer)
+        .filter(ProductLayer.product_id == product.id, ProductLayer.layer_key == "thematic_map_pdf")
+        .one_or_none()
+    )
+    if layer is None:
+        return None
+    blob = (layer.metadata_json or {}).get("pdf_b64")
+    if not isinstance(blob, str) or not blob:
+        return None
+    return f"/products/{product.id}/emergency-map.pdf"
+
+
+def emergency_pdf_bytes(db: Session, product: Product) -> bytes | None:
+    import base64
+
+    layer = (
+        db.query(ProductLayer)
+        .filter(ProductLayer.product_id == product.id, ProductLayer.layer_key == "thematic_map_pdf")
+        .one_or_none()
+    )
+    if layer is None:
+        return None
+    blob = (layer.metadata_json or {}).get("pdf_b64")
+    if not isinstance(blob, str) or not blob:
+        return None
+    try:
+        data = base64.b64decode(blob, validate=True)
+    except (ValueError, TypeError):
+        return None
+    if not data.startswith(b"%PDF"):
+        return None
+    return data
+
+
 def emergency_document(db: Session, product: Product) -> dict[str, Any] | None:
     layer = (
         db.query(ProductLayer)
@@ -343,6 +433,8 @@ def published_map(
                 "acquisition_start": product.acquisition_start.isoformat() if product.acquisition_start else None,
                 "s1_product_id": product.s1_product_id,
                 "layers": display_layers_for(db, product, area),
+                "rasters": raster_layers_for(db, product),
+                "geopdf_path": geopdf_path_for(db, product),
                 "impact": summarize_impact(cross),
                 "impact_including_lowconf": summarize_impact(cross, "including_lowconf"),
                 "emergency_map": emergency_document(db, product),

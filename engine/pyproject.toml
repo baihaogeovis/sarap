@@ -47,6 +47,7 @@ sarap_engine = [
   "plugins/snap/graphs/*.j2",
   "domain/data/*.json",
   "fixtures/*.geojson",
+  "assets/*.ttf",
 ]
 
 [tool.pytest.ini_options]

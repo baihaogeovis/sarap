@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,8 @@ import numpy as np
 from sarap_engine.algo.grid import GridSpec
 from sarap_engine.algo.morphology import label_connected
 from sarap_engine.constants import ClassCode
+from sarap_engine.products.cog import write_rgba_cog
+from sarap_engine.products.geopdf import build_emergency_geopdf
 from sarap_engine.products.models import ProductLayer, ProductManifest, ProductMetadata
 from sarap_engine.products.raster_io import HAS_RASTERIO, write_raster
 
@@ -247,8 +250,9 @@ def write_thematic_png(
 ) -> ProductLayer | None:
     """Duty preview PNG: class grid, impact objects, and the key numbers.
 
-    GeoPDF stays out of this version. Chinese captions are in emergency_map.json
-    because the default bitmap font has no CJK glyphs.
+    The one-map zooms the COG tiles. This PNG is the static preview that sits
+    beside thematic_map.pdf. Chinese captions are in the GeoPDF and emergency_map.json;
+    the bitmap font here stays ASCII.
     """
     if not HAS_PIL:
         return None
@@ -301,7 +305,120 @@ def write_thematic_png(
         name="thematic_map",
         uri=str(path),
         media_type="image/png",
-        note="应急专题图预览（PNG）。GeoPDF 不在本增量。",
+        note="应急专题图预览（PNG）。缩放看 COG 瓦片，正式出图是 thematic_map.pdf。",
+    )
+
+
+_DISPLAY_COLORS = {
+    2: (79, 142, 160, 220),
+    3: (196, 92, 38, 230),
+    4: (201, 162, 39, 170),
+    5: (42, 111, 122, 230),
+}
+
+
+def _paint(mask: np.ndarray, color: tuple[int, int, int, int]) -> np.ndarray:
+    rgba = np.zeros((mask.shape[0], mask.shape[1], 4), dtype=np.uint8)
+    rgba[np.asarray(mask, dtype=bool)] = color
+    return rgba
+
+
+def _colorize(class_map: np.ndarray) -> np.ndarray:
+    rgba = np.zeros(class_map.shape + (4,), dtype=np.uint8)
+    for code, color in _DISPLAY_COLORS.items():
+        rgba[class_map == code] = color
+    return rgba
+
+
+def _display_payload(rgba: np.ndarray, grid: GridSpec) -> dict[str, Any]:
+    return {
+        "crs": grid.crs,
+        "transform": [float(value) for value in grid.affine()],
+        "width": int(rgba.shape[1]),
+        "height": int(rgba.shape[0]),
+        "samples": 4,
+        "encoding": "rgba-raw",
+        "pixels_b64": base64.b64encode(np.ascontiguousarray(rgba).tobytes()).decode("ascii"),
+    }
+
+
+def _store_display(out_dir: Path, name: str, rgba: np.ndarray, grid: GridSpec) -> dict[str, Any] | None:
+    if rgba.size == 0 or not np.any(rgba[:, :, 3]):
+        return None
+    ox, resx, _, oy, _, resy = grid.affine()
+    write_rgba_cog(
+        out_dir / f"{name}_display.tif",
+        rgba,
+        crs=grid.crs,
+        origin_x=float(ox),
+        origin_y=float(oy),
+        res_x=abs(float(resx)),
+        res_y=abs(float(resy)),
+    )
+    return _display_payload(rgba, grid)
+
+
+def _attach_map_rasters(
+    layers: list[ProductLayer],
+    out_dir: Path,
+    class_map: np.ndarray,
+    grid: GridSpec,
+    *,
+    has_baseline: bool,
+    emergency: dict[str, Any] | None,
+    impact_layers: dict[str, Any] | None,
+    product_id: str,
+) -> None:
+    """RGBA display rasters for the one-map, plus a GeoPDF next to the PNG preview."""
+    by_name = {layer.name: layer for layer in layers}
+    if has_baseline:
+        flood = _store_display(out_dir, "flood_event", _paint(class_map == ClassCode.FLOOD_EVENT, _DISPLAY_COLORS[3]), grid)
+        if flood and "flood_event" in by_name:
+            by_name["flood_event"].extra = {"display": flood}
+        baseline = _store_display(
+            out_dir,
+            "baseline_water",
+            _paint(class_map == ClassCode.PERMANENT_OR_BASELINE_WATER, _DISPLAY_COLORS[2]),
+            grid,
+        )
+        if baseline:
+            cog = out_dir / "baseline_water_display.tif"
+            layers.append(
+                ProductLayer(
+                    name="baseline_water",
+                    uri=str(cog),
+                    media_type="image/tiff",
+                    note="本底水体显示层（RGBA COG，分析坐标系）。",
+                    extra={"display": baseline},
+                )
+            )
+    else:
+        extracted = _store_display(
+            out_dir,
+            "water_current",
+            _paint(class_map == ClassCode.EXTRACTED_WATER, _DISPLAY_COLORS[5]),
+            grid,
+        )
+        if extracted and "water_current" in by_name:
+            by_name["water_current"].extra = {"display": extracted}
+
+    pdf = build_emergency_geopdf(
+        _colorize(class_map),
+        grid,
+        emergency=emergency if isinstance(emergency, dict) else {},
+        impact_layers=impact_layers,
+        product_id=product_id,
+    )
+    pdf_path = out_dir / "thematic_map.pdf"
+    pdf_path.write_bytes(pdf)
+    layers.append(
+        ProductLayer(
+            name="thematic_map_pdf",
+            uri=str(pdf_path),
+            media_type="application/pdf",
+            note="应急专题图 GeoPDF。",
+            extra={"pdf_b64": base64.b64encode(pdf).decode("ascii")},
+        )
     )
 
 
@@ -357,6 +474,16 @@ def package_product(
     png = write_thematic_png(out_dir, class_map, grid, emergency=emergency_map, impact_layers=impact_layers)
     if png is not None:
         layers.append(png)
+    _attach_map_rasters(
+        layers,
+        out_dir,
+        class_map,
+        grid,
+        has_baseline=has_baseline,
+        emergency=emergency_map if isinstance(emergency_map, dict) else {},
+        impact_layers=impact_layers,
+        product_id=metadata.product_id,
+    )
 
     meta_path = _write_json(out_dir / "metadata.json", metadata.to_public_dict())
     layers.append(_layer("metadata", meta_path, "application/json"))
