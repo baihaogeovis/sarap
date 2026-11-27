@@ -333,6 +333,8 @@ def published_map(
                 "title": product.title,
                 "status": product.status,
                 "flood_event_status": product.flood_event_status,
+                "baseline_version": product.baseline_version or "",
+                "baseline_version_id": str(product.baseline_version_id) if product.baseline_version_id else None,
                 "version": product.version,
                 "scene_code": product.scene_code,
                 "extracted_water_ha": product.extracted_water_ha,

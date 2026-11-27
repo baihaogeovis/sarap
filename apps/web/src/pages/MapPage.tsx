@@ -199,7 +199,7 @@ export function MapPage() {
   );
 }
 
-function ImpactCard({ product }: { product: { title: string; flood_event_status: string; flood_event_ha?: number | null; extracted_water_ha?: number | null; water_current_ha?: number | null; impact?: ImpactSummary; impact_including_lowconf?: ImpactSummary } | null }) {
+function ImpactCard({ product }: { product: { title: string; flood_event_status: string; baseline_version?: string; flood_event_ha?: number | null; extracted_water_ha?: number | null; water_current_ha?: number | null; impact?: ImpactSummary; impact_including_lowconf?: ImpactSummary } | null }) {
   if (!product) {
     return (
       <aside className="card stats-card">
@@ -224,6 +224,20 @@ function ImpactCard({ product }: { product: { title: string; flood_event_status:
         <span>{inundationLabel}</span>
         <strong>{formatHa(inundation)}</strong>
       </div>
+      {product.flood_event_status === "computed" && (
+        <>
+          <div className="stat-row">
+            <span>当期水体</span>
+            <strong>{formatHa(product.water_current_ha)}</strong>
+          </div>
+          {product.baseline_version && (
+            <div className="stat-row">
+              <span>本底版本</span>
+              <strong>{product.baseline_version}</strong>
+            </div>
+          )}
+        </>
+      )}
       {impact?.impact_configured ? (
         <>
           <div className="stat-row">

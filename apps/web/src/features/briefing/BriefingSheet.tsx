@@ -71,6 +71,7 @@ export function BriefingSheet({ document }: { document: BriefingDocument }) {
         {document.product ? ` · ${document.product.title} · v${document.product.version}` : ""}
         {document.product?.acquisition_start ? ` · 成像 ${document.product.acquisition_start}` : ""}
         {document.basis_label ? ` · ${document.basis_label}` : ""}
+        {document.product?.baseline_version ? ` · 本底 ${document.product.baseline_version}` : ""}
       </p>
       <MapView
         layers={layers}
@@ -85,6 +86,12 @@ export function BriefingSheet({ document }: { document: BriefingDocument }) {
           <span>{stats.inundation_label || "范围面积"}</span>
           <strong>{formatHa(stats.inundation_ha)}</strong>
         </div>
+        {document.flood_event_status === "computed" && (
+          <div>
+            <span>当期水体</span>
+            <strong>{formatHa(stats.water_current_ha)}</strong>
+          </div>
+        )}
         {stats.impact_configured && (
           <>
             <div>
