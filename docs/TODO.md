@@ -8,6 +8,7 @@
 - [x] mock 值班主路径：按项目区域（analysis_crs / AOI 可配）创建洪水任务，可选已入仓影像和已发布本底；mock 引擎跑完后，任务列表、任务详情和质检页能看到 succeeded 与 draft 产品。不下载 Sentinel-1，不需要 SNAP。
 - [ ] 钉死第一版产品发布路径，并改 `apps/api` 的状态机、测试和 `apps/api/README.md` 使之与口径一致。需求与里程碑要求 `draft → submit → pending_qc → publish`（或 reject 回 `draft`），未质检不得进入默认一张图和简报；GIS v1.1.1 则允许 P0 最短发布。当前代码仍允许 `draft` 直接发布。撤回仅管理员、再发布必须新版本且 `re_qc_required`、时效用 `suggested_target_minutes=240` 这些保持不变。
 - [x] 一张图默认视图展示所选区域已发布产品的淹没/水体矢量。mock 把 GeoJSON 随入库回传，API 按该区域 `analysis_crs` 转到 `EPSG:4326` 给 OpenLayers。草稿、待质检、已撤回不进默认图；没有已发布产品时显示空状态。
+- [x] 影响对象、应急图和简报：在分析网格上把道路、居民点、行政区叠到淹没或提取水体上，算出面积和影响统计；一张图和默认简报只用已发布产品。演示用仓内 `fixture:public_validation_window`，不入库 Sen1Floods11，也不把某个国内流域写成已有标注。GeoPDF、国内 Sentinel-1 实景和 SNAP `gpt` 仍未做。
 - [ ] 一张图 COG 瓦片，以及识别与 PNG 导出的进一步完善。
 - [ ] 按 OpenAPI 生成 `packages/api-client`，替换占位包，给前端正式类型和调用。
 - [ ] 继续完成 M1（至 2026-11-27）：登录三角色、项目/区域、场景开通、编目与本底库的可演示闭环。
@@ -25,7 +26,7 @@
 
 - [ ] 生产环境关闭 `SARAP_SEED_ON_STARTUP`，更换 `SARAP_SECRET_KEY`、数据库密码、MinIO 密钥和内部令牌；JWT 测试密钥过短的警告一并处理。
 - [ ] 管理端完善成员、区域停用、场景关闭后的任务规则（禁止新建，进行中可跑完，历史可查）。
-- [ ] 简报模板与已发布产品引用、只读可见性。
+- [x] 简报默认视图引用已发布产品（含影响统计和应急图层）；只读看不到未发布简报记录。完整 GeoPDF 模板仍未做。
 - [ ] 高保真效果图如已出，对照补齐前端细节。
 
 ## 文档与发布

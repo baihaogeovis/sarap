@@ -30,6 +30,7 @@ DEMO_USERS = (
 def seed_if_empty(db: Session) -> None:
     if db.query(Organization).first() is not None:
         _ensure_rbac(db)
+        _ensure_demo_impact_assets(db)
         db.commit()
         return
     _ensure_rbac(db)
@@ -71,6 +72,7 @@ def seed_if_empty(db: Session) -> None:
             "grid": DEMO_PILOT_CONFIG["grid"],
             "s1": DEMO_PILOT_CONFIG["s1"],
             "overrides": DEMO_PILOT_CONFIG["overrides"],
+            "impact_assets": DEMO_PILOT_CONFIG["impact_assets"],
         },
     )
     db.add(area)
@@ -136,7 +138,25 @@ def seed_if_empty(db: Session) -> None:
                 role_code=role_code,
             )
         )
+    _ensure_demo_impact_assets(db)
     db.commit()
+
+
+def _ensure_demo_impact_assets(db: Session) -> None:
+    """Point the seeded demo area at the compact public-validation fixture.
+
+    Does not replace a road reference the operator already set, and does not
+    invent a domestic AOI.
+    """
+    area = db.query(Area).filter(Area.code == "demo-area").one_or_none()
+    if area is None:
+        return
+    config = dict(area.config_json or {})
+    current = config.get("impact_assets")
+    if isinstance(current, dict) and current.get("road"):
+        return
+    config["impact_assets"] = dict(DEMO_PILOT_CONFIG["impact_assets"])
+    area.config_json = config
 
 
 def _ensure_rbac(db: Session) -> None:

@@ -10,6 +10,7 @@ import GeoJSON from "ol/format/GeoJSON";
 import { fromLonLat } from "ol/proj";
 import { createEmpty, extend, isEmpty } from "ol/extent";
 import { Fill, Stroke, Style } from "ol/style";
+import type { FeatureLike } from "ol/Feature";
 import type { LayerSpec } from "./layers";
 import { attachSwipe } from "./swipe";
 import { exportMapPng } from "./exportPng";
@@ -20,16 +21,28 @@ type Props = {
   zoom?: number;
   fitToken?: string;
   notice?: string;
+  compact?: boolean;
 };
 
-function styleFor(color: string, fill = true) {
-  return new Style({
-    fill: fill ? new Fill({ color: `${color}99` }) : undefined,
-    stroke: new Stroke({ color, width: fill ? 1.5 : 2 }),
-  });
+function styleFor(spec: LayerSpec) {
+  return (feature: FeatureLike) => {
+    const affected = feature.get("affected");
+    const muted = affected === false;
+    const color = muted ? "#5c6b73" : spec.color;
+    const fill = spec.fill !== false && !muted;
+    const width = spec.strokeWidth ?? (spec.kind === "road" ? 3 : spec.fill === false ? 2 : 1.5);
+    return new Style({
+      fill: fill ? new Fill({ color: `${color}66` }) : undefined,
+      stroke: new Stroke({
+        color,
+        width,
+        lineDash: muted ? [5, 4] : undefined,
+      }),
+    });
+  };
 }
 
-export function MapView({ layers, center = [116.5, 39.85], zoom = 9, fitToken = "", notice }: Props) {
+export function MapView({ layers, center = [116.5, 39.85], zoom = 9, fitToken = "", notice, compact = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const [swipe, setSwipe] = useState(false);
@@ -81,7 +94,7 @@ export function MapView({ layers, center = [116.5, 39.85], zoom = 9, fitToken = 
       });
       const layer = new VectorLayer({
         source,
-        style: styleFor(spec.color, spec.fill !== false),
+        style: styleFor(spec),
         properties: { id: spec.id },
       });
       map.addLayer(layer);
@@ -92,9 +105,22 @@ export function MapView({ layers, center = [116.5, 39.85], zoom = 9, fitToken = 
       const focus = productLayers.length ? productLayers : created;
       const extent = createEmpty();
       focus.forEach((layer) => extend(extent, layer.getSource()?.getExtent() ?? createEmpty()));
-      if (!isEmpty(extent)) {
+      const fit = () => {
+        map.updateSize();
+        const size = map.getSize();
+        if (!size || size[0] < 2 || size[1] < 2 || isEmpty(extent)) return false;
         fittedToken.current = fitToken;
-        map.getView().fit(extent, { padding: [64, 64, 64, 64], maxZoom: 15 });
+        map.getView().fit(extent, { padding: [48, 48, 48, 48], maxZoom: 16 });
+        return true;
+      };
+      if (!fit()) {
+        let tries = 0;
+        const retry = () => {
+          if (fittedToken.current === fitToken || fit() || tries >= 8) return;
+          tries += 1;
+          window.setTimeout(retry, 60);
+        };
+        retry();
       }
     }
     const eventLayer = created.find((_, index) => visible[index]?.kind === "event");
@@ -105,7 +131,7 @@ export function MapView({ layers, center = [116.5, 39.85], zoom = 9, fitToken = 
   }, [layers, swipe, ratio, fitToken]);
 
   return (
-    <div className="map-wrap">
+    <div className={compact ? "map-wrap compact" : "map-wrap"}>
       <div className="map-toolbar">
         <button className={`btn ${swipe ? "accent" : "ghost"}`} onClick={() => setSwipe((v) => !v)} type="button">
           {swipe ? "关闭卷帘" : "卷帘对比"}

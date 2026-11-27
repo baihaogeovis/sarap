@@ -161,6 +161,11 @@ def create_product(
     db.flush()
     product_service.sync_layers(db, row, body.artifacts_json)
     product_service.sync_area_stats(db, row)
+    product_service.sync_cross_stats(
+        db,
+        row,
+        product_service.impact_document_from_artifacts(body.artifacts_json),
+    )
     db.commit()
     db.refresh(row)
     return ok(product_out(row).model_dump(mode="json"), status_code=201)
@@ -260,7 +265,7 @@ def list_layers(
     allowed_keys = set(product_service.layer_keys_for(db, row))
     layers = (
         db.query(ProductLayer)
-        .filter(ProductLayer.product_id == row.id, ProductLayer.layer_key.in_(allowed_keys | {"thematic_map", "qc_summary", "sigma0_vv_db"}))
+        .filter(ProductLayer.product_id == row.id, ProductLayer.layer_key.in_(allowed_keys | product_service.EXTRA_LAYER_KEYS))
         .all()
     )
     # If no rows yet, still return the official key list so the map client can bind switches.

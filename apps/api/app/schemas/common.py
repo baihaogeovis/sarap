@@ -359,6 +359,7 @@ class InternalProductIn(BaseModel):
     s1_product_id: str = ""
     qc_warnings: list[str] = Field(default_factory=list)
     error_code: str = ""
+    impact_stats: dict[str, Any] | None = None
 
 class AreaIn(BaseModel):
     code: str

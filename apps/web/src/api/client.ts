@@ -204,10 +204,24 @@ export type MapGeoJson = {
   }[];
 };
 
+export type MapLayerKind = "water" | "event" | "baseline" | "qc" | "admin" | "road" | "settlement" | "cropland" | "other";
+
+export type ImpactSummary = {
+  impact_configured?: boolean;
+  scope?: string;
+  affected_road_count?: number;
+  affected_road_length_m?: number;
+  affected_settlement_count?: number;
+  affected_settlement_area_ha?: number;
+  affected_admin_count?: number;
+  affected_admin_area_ha?: number;
+};
+
 export type MapProductLayer = {
   layer_key: string;
   title: string;
-  kind: "water" | "event" | "baseline" | "qc" | "other";
+  kind: MapLayerKind;
+  fill?: boolean;
   geojson: MapGeoJson;
 };
 
@@ -226,8 +240,57 @@ export type MapPayload = {
     flood_event_status: string;
     version: number;
     scene_code: string;
+    extracted_water_ha?: number | null;
+    water_current_ha?: number | null;
+    flood_event_ha?: number | null;
+    acquisition_start?: string | null;
+    s1_product_id?: string;
     layers: MapProductLayer[];
+    impact?: ImpactSummary;
+    impact_including_lowconf?: ImpactSummary;
+    emergency_map?: Record<string, unknown> | null;
   }[];
+};
+
+export type BriefingDocument = {
+  title: string;
+  status: string;
+  briefing_id: string | null;
+  empty: boolean;
+  notice: string;
+  summary: string;
+  conclusion: string;
+  basis_label: string;
+  flood_event_status: string | null;
+  product: {
+    id: string;
+    title: string;
+    version: number;
+    status: string;
+    published_at: string | null;
+    acquisition_start: string | null;
+    s1_product_id: string;
+  } | null;
+  omitted_product_ids: string[];
+  stats: ImpactSummary & {
+    inundation_ha?: number | null;
+    inundation_label?: string;
+    water_current_ha?: number | null;
+    extracted_water_ha?: number | null;
+    flood_event_ha?: number | null;
+    including_lowconf?: ImpactSummary;
+  };
+  limitation: string;
+  footnotes: string[];
+  area: {
+    id: string | null;
+    name: string;
+    analysis_crs: string;
+    aoi: MapGeoJson | null;
+  };
+  layers: MapProductLayer[];
+  emergency_map: Record<string, unknown> | null;
+  source_note: string;
 };
 
 export type Briefing = {
@@ -300,6 +363,12 @@ export const api = {
     request<Product>(`/products/${id}/withdraw`, { method: "POST", body: JSON.stringify({ reason }) }),
   briefings: (projectId: string) => request<Briefing[]>(`/briefings?project_id=${projectId}`),
   briefing: (id: string) => request<Briefing>(`/briefings/${id}`),
+  briefingPreview: (projectId: string, areaId: string, sceneCode?: string) => {
+    const query = new URLSearchParams({ project_id: projectId, area_id: areaId });
+    if (sceneCode) query.set("scene_code", sceneCode);
+    return request<BriefingDocument>(`/briefings/preview?${query}`);
+  },
+  briefingDocument: (id: string) => request<BriefingDocument>(`/briefings/${id}/document`),
   createBriefing: (body: Record<string, unknown>) =>
     request<Briefing>("/briefings", { method: "POST", body: JSON.stringify(body) }),
   publishBriefing: (id: string) => request<Briefing>(`/briefings/${id}/publish`, { method: "POST" }),

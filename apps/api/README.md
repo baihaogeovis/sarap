@@ -11,7 +11,7 @@
 | 批次 | 平台行为 |
 | --- | --- |
 | **P0 值班员出图** | 无本底也可开通洪水场景（返回 `meta.warnings`，**不** 403/400 阻断）。任务成功后 **duty_officer 与 admin** 都可把 `draft` 直接发布到一张图，不必先走 `pending_qc`。无本底面积字段为 `extracted_water_ha`，文案「提取水体面积（未扣本底）」；不产出对外名为「本次淹没」的图层（`flood_event_status=baseline_missing`）。有本底同时给 `water_current_ha` 与 `flood_event_ha`。缺已发布 `permanent_water` 时不允许「启用自动本次淹没发布」，但不阻断准范围任务与最短发布。一般质控警告不阻断 P0 发布；硬错误（`PROCESSING_FAILED` / `GRID_MISALIGNED` / `COVERAGE_TOO_LOW`）才失败。 |
-| **P1（模型与接口已落，不挡 P0）** | `data_asset` + `data_asset_version`（仅 `review_status=published` 可被「本次淹没」引用）。完整质检打回：`pending_qc` → `draft`，**必须填原因**，不要把 `withdrawn` 当打回。交叉统计（县/乡镇、道路、居民点）仅当已挂已发布资产时才返回；未挂资产不返回空壳、不虚报。P0 的 `impact_stat` 只出面积。 |
+| **P1（模型与接口已落，不挡 P0）** | `data_asset` + `data_asset_version`（仅 `review_status=published` 可被「本次淹没」引用）。完整质检打回：`pending_qc` → `draft`，**必须填原因**，不要把 `withdrawn` 当打回。交叉统计（县/乡镇、道路、居民点，耕地仅在几何真的传入时）由引擎在分析网格上计算后写入 `impact_stat`。未配置对象、或几何不可读时不返回空壳、不把 0 当成已测量。面积统计仍然总是写。默认一张图 `GET /products/map` 和默认简报 `GET /briefings/preview` 只读已发布产品。 |
 | **权限（已锁定）** | 值班员可质检（`product.qc`）并发布（`product.publish`），**不能撤回**。仅 admin 可 `product.withdraw`。撤回后只读与默认一张图（`?for_map=true`）不可见。再发布必须新版本且 `re_qc_required`（禁止最短发布，须重新提交质检）。禁止就地改已发布记录。readonly 默认只见 `published`。 |
 
 产品 `status`：`draft` / `pending_qc` / `published` / `withdrawn`（`pending_qc` 对应此前的 pending_review）。本底版本用独立的 `review_status`：`draft` / `pending_review` / `published` / `rejected` / `deprecated`，不要和产品状态混用。

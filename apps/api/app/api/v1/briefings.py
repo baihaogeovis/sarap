@@ -9,12 +9,26 @@ from app.api.v1.serializers import briefing_out
 from app.core.db import get_db
 from app.core.deps import Principal, get_current_principal
 from app.core.responses import APIError, ok
-from app.models import Briefing, Project, Scene
+from app.models import Area, Briefing, Product, Project, Scene
 from app.models.base import utcnow
 from app.schemas.common import BriefingIn
 from app.services import audit
+from app.services.briefing_view import briefing_document, preview_briefing
 
 router = APIRouter(prefix="/briefings", tags=["briefings"])
+
+
+def _require_published_products(db: Session, org_id: uuid.UUID, product_ids: list) -> None:
+    for raw in product_ids or []:
+        try:
+            product_id = raw if isinstance(raw, uuid.UUID) else uuid.UUID(str(raw))
+        except (TypeError, ValueError) as exc:
+            raise APIError(422, "validation_error", "简报引用了无法识别的产品") from exc
+        product = db.get(Product, product_id)
+        if product is None or product.org_id != org_id or product.deleted_at is not None:
+            raise APIError(422, "validation_error", "简报引用了不存在的产品")
+        if product.status != "published":
+            raise APIError(409, "unpublished_product", "简报发布只能引用已发布产品")
 
 
 def _get(db: Session, briefing_id: uuid.UUID, org_id: uuid.UUID) -> Briefing:
@@ -68,6 +82,25 @@ def create_briefing(
     return ok(briefing_out(row).model_dump(mode="json"), status_code=201)
 
 
+@router.get("/preview")
+def preview(
+    project_id: uuid.UUID = Query(),
+    area_id: uuid.UUID = Query(),
+    scene_code: str | None = Query(default=None),
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """Default briefing for one area. Published products only."""
+    principal.require("briefing.read")
+    project = db.get(Project, project_id)
+    if project is None or project.org_id != principal.org_id or project.deleted_at is not None:
+        raise APIError(404, "not_found", "Project not found")
+    area = db.get(Area, area_id)
+    if area is None or area.org_id != principal.org_id or area.project_id != project.id or area.deleted_at is not None:
+        raise APIError(404, "not_found", "Area not found")
+    return ok(preview_briefing(db, org_id=principal.org_id, project=project, area=area, scene_code=scene_code))
+
+
 @router.get("/{briefing_id}")
 def get_briefing(
     briefing_id: uuid.UUID,
@@ -79,6 +112,20 @@ def get_briefing(
     if "admin" not in principal.roles and "duty_officer" not in principal.roles and row.status != "published":
         raise APIError(404, "not_found", "Briefing not found")
     return ok(briefing_out(row).model_dump(mode="json"))
+
+
+@router.get("/{briefing_id}/document")
+def briefing_view(
+    briefing_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """Rendered briefing. Unpublished cited products are omitted, not drawn."""
+    principal.require("briefing.read")
+    row = _get(db, briefing_id, principal.org_id)
+    if "admin" not in principal.roles and "duty_officer" not in principal.roles and row.status != "published":
+        raise APIError(404, "not_found", "Briefing not found")
+    return ok(briefing_document(db, row))
 
 
 @router.patch("/{briefing_id}")
@@ -110,6 +157,7 @@ def publish_briefing(
     row = _get(db, briefing_id, principal.org_id)
     if row.status != "draft":
         raise APIError(409, "invalid_transition", "Only draft briefings can be published")
+    _require_published_products(db, principal.org_id, row.product_ids)
     row.status = "published"
     row.published_at = utcnow()
     audit.record(

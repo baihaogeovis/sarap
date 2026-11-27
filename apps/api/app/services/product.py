@@ -45,6 +45,18 @@ P0_LAYER_KEYS = [
     "metadata",
 ]
 BASELINE_LAYER_KEYS = ["flood_event", "flood_event_poly"]
+EXTRA_LAYER_KEYS = {
+    "thematic_map",
+    "sigma0_vv_db",
+    "impact_stats",
+    "qc_summary",
+    "emergency_map",
+    "impact_admin_poly",
+    "impact_road",
+    "impact_settlement",
+    "impact_cropland",
+}
+CROSS_OBJECT_TYPES = {"admin_county", "admin_township", "road", "settlement", "cropland"}
 
 DEPTH_KEY_FRAGMENTS = ("depth", "water_depth", "flood_depth")
 
@@ -316,7 +328,7 @@ def sync_layers(db: Session, product: Product, artifacts: list[Any] | None = Non
     for key, item in incoming.items():
         if key in BASELINE_LAYER_KEYS and not has_baseline(db, product):
             continue
-        if key not in allowed and key not in {"thematic_map", "sigma0_vv_db", "impact_stats", "qc_summary"}:
+        if key not in allowed and key not in EXTRA_LAYER_KEYS:
             # still store unknown non-event layers for archival
             pass
         existing = (
@@ -369,6 +381,66 @@ def sync_area_stats(db: Session, product: Product) -> None:
                     "parent_admin_code": "",
                     "baseline_version_id": baseline_id,
                 },
+            )
+        )
+    db.flush()
+
+
+def impact_document_from_artifacts(artifacts: list[Any] | None) -> dict[str, Any] | None:
+    for item in artifacts or []:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("layer_key") or item.get("name") or item.get("key")
+        if key != "impact_stats":
+            continue
+        meta = item.get("metadata_json") or item.get("metadata") or {}
+        if not isinstance(meta, dict):
+            continue
+        doc = meta.get("document") or meta.get("impact_stats")
+        if isinstance(doc, dict):
+            return doc
+    return None
+
+
+def sync_cross_stats(db: Session, product: Product, impact_stats: dict[str, Any] | None) -> None:
+    """Replace cross-object rows. Missing assets stay absent; measured zeros are not padded in."""
+    db.query(ImpactStat).filter(
+        ImpactStat.product_id == product.id,
+        ImpactStat.object_type.in_(CROSS_OBJECT_TYPES),
+    ).delete(synchronize_session=False)
+    if not isinstance(impact_stats, dict):
+        return
+    for item in impact_stats.get("cross_stats") or []:
+        if not isinstance(item, dict):
+            continue
+        object_type = str(item.get("object_type") or "")
+        metric = str(item.get("metric") or "")
+        if object_type not in CROSS_OBJECT_TYPES or not metric:
+            continue
+        if any(frag in metric.lower() for frag in DEPTH_KEY_FRAGMENTS):
+            continue
+        try:
+            value = float(item["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if value == 0:
+            continue
+        raw_extra = item.get("extra") if isinstance(item.get("extra"), dict) else {}
+        extra = official_stat_extra(product, raw_extra, db)
+        if item.get("basis") and "basis" not in extra:
+            extra["basis"] = item.get("basis")
+        db.add(
+            ImpactStat(
+                org_id=product.org_id,
+                product_id=product.id,
+                object_type=object_type,
+                object_id=str(item.get("object_id") or "")[:128],
+                object_name=str(item.get("object_name") or "")[:200],
+                metric=metric[:64],
+                value=value,
+                unit=str(item.get("unit") or "")[:32],
+                scope=str(item.get("scope") or "default")[:32],
+                extra_json=extra,
             )
         )
     db.flush()
