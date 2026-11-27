@@ -1,3 +1,4 @@
+import type { components } from "@sarap/api-client";
 
 export type Envelope<T> = {
   data: T;
@@ -225,6 +226,9 @@ export type MapProductLayer = {
   geojson: MapGeoJson;
 };
 
+/** Raster overlay from the generated OpenAPI schema. */
+export type MapRasterLayer = components["schemas"]["MapRasterOut"];
+
 export type MapPayload = {
   area: {
     id: string;
@@ -248,6 +252,8 @@ export type MapPayload = {
     acquisition_start?: string | null;
     s1_product_id?: string;
     layers: MapProductLayer[];
+    rasters?: MapRasterLayer[];
+    geopdf_path?: string | null;
     impact?: ImpactSummary;
     impact_including_lowconf?: ImpactSummary;
     emergency_map?: Record<string, unknown> | null;
@@ -293,6 +299,8 @@ export type BriefingDocument = {
     aoi: MapGeoJson | null;
   };
   layers: MapProductLayer[];
+  rasters?: MapRasterLayer[];
+  geopdf_path?: string | null;
   emergency_map: Record<string, unknown> | null;
   source_note: string;
 };
@@ -357,6 +365,26 @@ export const api = {
   },
   layerGeojson: (productId: string, layerKey: string) =>
     request<MapGeoJson>(`/products/${productId}/layers/${layerKey}`),
+  identify: (productId: string, lon: number, lat: number) =>
+    request<{ hits: { layer_key: string; title: string; kind: string }[] }>(
+      `/products/${productId}/identify?lon=${encodeURIComponent(lon)}&lat=${encodeURIComponent(lat)}`,
+    ),
+  download: async (path: string, filename: string) => {
+    const headers = new Headers();
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${apiBase()}${path}`, { headers });
+    if (!response.ok) {
+      throw new ApiError(response.status, "http_error", "下载失败");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
   product: (id: string) => request<Product>(`/products/${id}`),
   submitProduct: (id: string) => request<Product>(`/products/${id}/submit`, { method: "POST", body: "{}" }),
   rejectProduct: (id: string, comment: string) =>

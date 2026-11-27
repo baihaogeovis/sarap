@@ -1,6 +1,6 @@
-import { useMemo } from "react";
-import type { BriefingDocument, MapLayerKind } from "../../api/client";
-import { MapView } from "../map/MapView";
+import { useMemo, useState } from "react";
+import { api, apiBase, type BriefingDocument, type MapLayerKind, type MapRasterLayer } from "../../api/client";
+import { MapView, type RasterSpec } from "../map/MapView";
 import { COLORS, collectionCenter, type FeatureCollection, type LayerSpec } from "../map/layers";
 
 function colorFor(kind: MapLayerKind): string {
@@ -19,7 +19,31 @@ function formatHa(value: number | null | undefined): string {
   return `${value} ha`;
 }
 
+function rasterBounds(raster: MapRasterLayer): [number, number, number, number] | null {
+  const [minx, miny, maxx, maxy] = raster.bounds ?? [];
+  if (![minx, miny, maxx, maxy].every((value) => Number.isFinite(value))) return null;
+  if (Math.abs(minx) > 180 || Math.abs(maxx) > 180 || Math.abs(miny) > 90 || Math.abs(maxy) > 90) return null;
+  return [minx, miny, maxx, maxy];
+}
+
 export function BriefingSheet({ document }: { document: BriefingDocument }) {
+  const [downloadError, setDownloadError] = useState("");
+  const rasterKinds = useMemo(() => new Set((document.rasters ?? []).map((raster) => raster.kind)), [document]);
+  const rasters = useMemo<RasterSpec[]>(() => {
+    return (document.rasters ?? []).flatMap((raster) => {
+      const bounds = rasterBounds(raster);
+      if (!bounds) return [];
+      return [
+        {
+          id: `raster:${raster.layer_key}`,
+          title: raster.title,
+          visible: true,
+          url: `${apiBase()}${raster.tile_template}`,
+          bounds,
+        },
+      ];
+    });
+  }, [document]);
   const layers = useMemo<LayerSpec[]>(() => {
     const specs: LayerSpec[] = [];
     if (document.area.aoi?.features?.length) {
@@ -34,6 +58,9 @@ export function BriefingSheet({ document }: { document: BriefingDocument }) {
       });
     }
     for (const layer of document.layers) {
+      if (rasterKinds.has(layer.kind) && (layer.kind === "water" || layer.kind === "event" || layer.kind === "baseline")) {
+        continue;
+      }
       specs.push({
         id: `${layer.layer_key}:${layer.kind}`,
         title: layer.title,
@@ -46,9 +73,11 @@ export function BriefingSheet({ document }: { document: BriefingDocument }) {
       });
     }
     return specs;
-  }, [document]);
+  }, [document, rasterKinds]);
 
   const center = useMemo<[number, number]>(() => {
+    const raster = (document.rasters ?? []).map(rasterBounds).find((bounds) => bounds != null);
+    if (raster) return [(raster[0] + raster[2]) / 2, (raster[1] + raster[3]) / 2];
     const focus =
       document.layers.find((layer) => layer.kind === "event" || layer.kind === "water") ?? document.layers[0];
     return (
@@ -59,7 +88,7 @@ export function BriefingSheet({ document }: { document: BriefingDocument }) {
   }, [document]);
 
   const stats = document.stats;
-  const fitToken = `${document.product?.id ?? "empty"}:${layers.map((layer) => layer.id).join(",")}`;
+  const fitToken = `${document.product?.id ?? "empty"}:${layers.map((layer) => layer.id).join(",")}:${rasters.map((raster) => raster.id).join(",")}`;
 
   return (
     <article className="briefing-sheet">
@@ -75,11 +104,20 @@ export function BriefingSheet({ document }: { document: BriefingDocument }) {
       </p>
       <MapView
         layers={layers}
+        rasters={rasters}
         center={center}
         zoom={15}
         fitToken={fitToken}
         compact
         notice={document.empty ? document.notice : ""}
+        sampleAt={
+          document.product
+            ? async (lon, lat) => {
+                const found = await api.identify(document.product?.id || "", lon, lat);
+                return found.hits.map((hit) => hit.title);
+              }
+            : undefined
+        }
       />
       <div className="sheet-stats">
         <div>
@@ -123,6 +161,19 @@ export function BriefingSheet({ document }: { document: BriefingDocument }) {
         <p className="sheet-note">有引用产品未发布或已撤回，未画入本简报。</p>
       )}
       <p className="sheet-note">{document.source_note}</p>
+      {document.geopdf_path && (
+        <button
+          className="btn"
+          type="button"
+          onClick={() => {
+            setDownloadError("");
+            api.download(document.geopdf_path || "", "emergency-map.pdf").catch(() => setDownloadError("GeoPDF 下载失败"));
+          }}
+        >
+          下载 GeoPDF
+        </button>
+      )}
+      {downloadError && <p className="error">{downloadError}</p>}
       <ul className="sheet-notes">
         {document.footnotes.map((line) => (
           <li key={line}>{line}</li>

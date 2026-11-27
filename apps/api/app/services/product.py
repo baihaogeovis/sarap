@@ -55,6 +55,8 @@ EXTRA_LAYER_KEYS = {
     "impact_road",
     "impact_settlement",
     "impact_cropland",
+    "baseline_water",
+    "thematic_map_pdf",
 }
 CROSS_OBJECT_TYPES = {"admin_county", "admin_township", "road", "settlement", "cropland"}
 

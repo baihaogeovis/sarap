@@ -1,0 +1,4 @@
+SarapCJK.ttf is a subset of Droid Sans Fallback (Apache License 2.0).
+SarapLatin.ttf is a subset of DejaVu Sans (Bitstream Vera / DejaVu license).
+Together they render emergency-map GeoPDF text without a system CJK font.
+The CJK subset covers GB2312. These files are fonts, not a map dataset.

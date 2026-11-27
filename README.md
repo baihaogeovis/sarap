@@ -26,7 +26,7 @@ sarap/
   apps/api/             Python 3.12 FastAPI platform API (SQLAlchemy 2, Alembic, JWT)
   apps/web/             Vite + React + TypeScript + OpenLayers 10
   engine/               Independent processing engine (developed in parallel)
-  packages/api-client/  Placeholder for later OpenAPI-generated TypeScript types
+  packages/api-client/  OpenAPI-generated TypeScript types (`MapRasterOut` and the rest of the schema)
   docs/                 功能、架构、TODO、部署，以及数据模型和引擎约定
   docs/specs/           GIS v1 flood product spec, SNAP defaults, GPT template
   docker-compose.yml    Postgres 16 + PostGIS, Redis, MinIO, api, web
@@ -93,7 +93,7 @@ docker compose --profile engine up --build
 
 Engine control plane (internal): http://localhost:8081 (`/health`). A background worker drains the queue and posts draft products back to the platform. If `SARAP_ENGINE_MODE=snap` and `gpt` is missing, jobs fail with `GPT_NOT_FOUND` and do not fall back to mock.
 
-To see 本次淹没 rather than extracted water, an administrator publishes a permanent-water baseline for the demo area with the raster URI left empty, then a duty officer creates a flood task that cites that published `baseline_version_id` and publishes the resulting draft. The default 一张图 and 简报 then show `flood_event` for that area: 6.75 ha of inundation, 17.75 ha of current water, one road (301 m), one settlement (0.79 ha), and two admin units (9.9 ha) on `fixture:public_validation_window`. A task that cites no baseline stays `flood_event_status=baseline_missing` (18.95 ha extracted water) and is not labeled 本次淹没. The default views use the latest published product only; draft, pending QC, and withdrawn products stay off both. The fixture is a compact 800 m open-water window inspired by the public Sen1Floods11 Mekong chips, stored as local metres, not a domestic labeled AOI and not the Sen1Floods11 rasters. See [部署说明](docs/deployment.md).
+To see 本次淹没 rather than extracted water, an administrator publishes a permanent-water baseline for the demo area with the raster URI left empty, then a duty officer creates a flood task that cites that published `baseline_version_id` and publishes the resulting draft. The default 一张图 and 简报 then show `flood_event` for that area: 6.75 ha of inundation, 17.75 ha of current water, one road (301 m), one settlement (0.79 ha), and two admin units (9.9 ha) on `fixture:public_validation_window`. A task that cites no baseline stays `flood_event_status=baseline_missing` (18.95 ha extracted water) and is not labeled 本次淹没. The default views use the latest published product only; draft, pending QC, and withdrawn products stay off both. Published flood, extracted-water, and baseline rasters are served as RGBA COGs and drawn as XYZ tiles, so zoom stays on the 10 m grid. The emergency-map button on 一张图 and 简报 downloads a one-page GeoPDF for that published product. The fixture is a compact 800 m open-water window inspired by the public Sen1Floods11 Mekong chips, stored as local metres, not a domestic labeled AOI and not the Sen1Floods11 rasters. See [部署说明](docs/deployment.md).
 
 ### Option B — Dependencies in Compose, apps on the host
 

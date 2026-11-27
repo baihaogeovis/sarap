@@ -2,18 +2,26 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.v1.serializers import product_out
 from app.core.db import get_db
 from app.core.deps import Principal, get_current_principal
-from app.core.responses import APIError, ok
+from app.core.responses import APIError, bytes_response, ok
 from app.models import Area, Dataset, ImpactStat, Product, ProductLayer, Project, Scene, Task
 from app.schemas.common import ImpactStatOut, ProductIn, ProductLayerOut, TransitionIn
+from app.schemas.map_view import MapEnvelope
 from app.services import product as product_service
 from app.services.baselines import fill_imagery_fields, require_applicable_version
-from app.services.map_layers import DISPLAY_CRS, load_layer_geojson, published_map
+from app.services.display_raster import cog_bytes, decode_display, render_tile, sample_hit
+from app.services.map_layers import (
+    DISPLAY_CRS,
+    emergency_pdf_bytes,
+    load_layer_geojson,
+    published_map,
+)
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -23,6 +31,30 @@ def _get(db: Session, product_id: uuid.UUID, org_id: uuid.UUID) -> Product:
     if row is None or row.org_id != org_id or row.deleted_at is not None:
         raise APIError(404, "not_found", "Product not found")
     return row
+
+
+def _require_visible(principal: Principal, row: Product) -> None:
+    allowed = product_service.visible_status_filter(principal)
+    if allowed is not None and row.status not in allowed:
+        raise APIError(404, "not_found", "Product not found")
+
+
+def _layer(db: Session, product: Product, layer_key: str) -> ProductLayer:
+    layer = (
+        db.query(ProductLayer)
+        .filter(ProductLayer.product_id == product.id, ProductLayer.layer_key == layer_key)
+        .one_or_none()
+    )
+    if layer is None:
+        raise APIError(404, "not_found", "Layer not found")
+    return layer
+
+
+def _display_or_404(layer: ProductLayer):
+    decoded = decode_display(layer.metadata_json or {})
+    if decoded is None:
+        raise APIError(404, "not_displayable", "Layer has no display raster")
+    return decoded
 
 
 @router.get("")
@@ -52,7 +84,7 @@ def list_products(
     return ok([product_out(r).model_dump(mode="json") for r in rows], meta={"total": len(rows)})
 
 
-@router.get("/map")
+@router.get("/map", responses={200: {"model": MapEnvelope}})
 def map_products(
     area_id: uuid.UUID = Query(),
     project_id: uuid.UUID | None = Query(default=None),
@@ -325,6 +357,110 @@ def get_layer_geojson(
             "empty": not collection.get("features"),
         },
     )
+
+
+@router.get(
+    "/{product_id}/layers/{layer_key}/tiles/{z}/{x}/{y}.png",
+    responses={200: {"content": {"image/png": {}}}},
+)
+def layer_tile(
+    product_id: uuid.UUID,
+    layer_key: str,
+    z: int,
+    x: int,
+    y: int,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """XYZ tile in Web Mercator. Pixels are sampled from the analysis-CRS display raster."""
+    principal.require("product.read")
+    row = _get(db, product_id, principal.org_id)
+    _require_visible(principal, row)
+    if z < 0 or z > 22 or x < 0 or y < 0 or x >= 2**z or y >= 2**z:
+        raise APIError(404, "not_found", "Tile is outside the world")
+    rgba, display = _display_or_404(_layer(db, row, layer_key))
+    return Response(content=render_tile(rgba, display, z, x, y), media_type="image/png", headers={"Cache-Control": "private, max-age=60"})
+
+
+@router.get(
+    "/{product_id}/layers/{layer_key}/cog",
+    responses={200: {"content": {"image/tiff": {}}}, 206: {"description": "Partial COG bytes"}},
+)
+def layer_cog(
+    product_id: uuid.UUID,
+    layer_key: str,
+    request: Request,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """RGBA Cloud Optimized GeoTIFF in the product analysis CRS."""
+    principal.require("product.read")
+    row = _get(db, product_id, principal.org_id)
+    _require_visible(principal, row)
+    rgba, display = _display_or_404(_layer(db, row, layer_key))
+    try:
+        data = cog_bytes(rgba, display)
+    except (ValueError, RuntimeError) as exc:
+        raise APIError(404, "not_displayable", "Layer raster cannot be written as a COG") from exc
+    return bytes_response(request, data, "image/tiff", filename=f"{layer_key}.tif")
+
+
+_IDENTIFY_ORDER = (
+    ("flood_event", "本次淹没", "event"),
+    ("baseline_water", "本底水体", "baseline"),
+    ("water_current", "提取水体（未扣本底）", "water"),
+)
+
+
+@router.get("/{product_id}/identify")
+def identify_product(
+    product_id: uuid.UUID,
+    lon: float = Query(),
+    lat: float = Query(),
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """Sample published-or-visible display rasters at one longitude/latitude."""
+    principal.require("product.read")
+    row = _get(db, product_id, principal.org_id)
+    _require_visible(principal, row)
+    hits: list[dict[str, str]] = []
+    for key, title, kind in _IDENTIFY_ORDER:
+        layer = (
+            db.query(ProductLayer)
+            .filter(ProductLayer.product_id == row.id, ProductLayer.layer_key == key)
+            .one_or_none()
+        )
+        if layer is None:
+            continue
+        decoded = decode_display(layer.metadata_json or {})
+        if decoded is None:
+            continue
+        rgba, display = decoded
+        if sample_hit(rgba, display, lon, lat):
+            hits.append({"layer_key": key, "title": title, "kind": kind})
+    return ok({"hits": hits}, meta={"crs": DISPLAY_CRS})
+
+
+@router.get(
+    "/{product_id}/emergency-map.pdf",
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+def emergency_map_pdf(
+    product_id: uuid.UUID,
+    request: Request,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """GeoPDF for a published product. Draft, pending QC, and withdrawn stay unavailable."""
+    principal.require("product.read")
+    row = _get(db, product_id, principal.org_id)
+    if row.status != "published":
+        raise APIError(404, "not_found", "GeoPDF is available after the product is published")
+    data = emergency_pdf_bytes(db, row)
+    if data is None:
+        raise APIError(404, "not_found", "This published product has no GeoPDF")
+    return bytes_response(request, data, "application/pdf", filename="emergency-map.pdf")
 
 
 @router.get("/{product_id}/stats")

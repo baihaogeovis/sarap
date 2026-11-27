@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.api.v1.serializers import briefing_out
 from app.core.db import get_db
 from app.core.deps import Principal, get_current_principal
-from app.core.responses import APIError, ok
+from app.core.responses import APIError, bytes_response, ok
 from app.models import Area, Briefing, Product, Project, Scene
 from app.models.base import utcnow
 from app.schemas.common import BriefingIn
 from app.services import audit
 from app.services.briefing_view import briefing_document, preview_briefing
+from app.services.map_layers import emergency_pdf_bytes
 
 router = APIRouter(prefix="/briefings", tags=["briefings"])
 
@@ -101,6 +102,38 @@ def preview(
     return ok(preview_briefing(db, org_id=principal.org_id, project=project, area=area, scene_code=scene_code))
 
 
+def _published_pdf(request: Request, db: Session, product: Product | None):
+    if product is None or product.status != "published":
+        raise APIError(404, "not_found", "GeoPDF is available after a product is published")
+    data = emergency_pdf_bytes(db, product)
+    if data is None:
+        raise APIError(404, "not_found", "This published product has no GeoPDF")
+    return bytes_response(request, data, "application/pdf", filename="emergency-map.pdf")
+
+
+@router.get("/preview/emergency-map.pdf")
+def preview_emergency_pdf(
+    request: Request,
+    project_id: uuid.UUID = Query(),
+    area_id: uuid.UUID = Query(),
+    scene_code: str | None = Query(default=None),
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """GeoPDF for the same published product the default briefing shows."""
+    principal.require("briefing.read")
+    project = db.get(Project, project_id)
+    if project is None or project.org_id != principal.org_id or project.deleted_at is not None:
+        raise APIError(404, "not_found", "Project not found")
+    area = db.get(Area, area_id)
+    if area is None or area.org_id != principal.org_id or area.project_id != project.id or area.deleted_at is not None:
+        raise APIError(404, "not_found", "Area not found")
+    view = preview_briefing(db, org_id=principal.org_id, project=project, area=area, scene_code=scene_code)
+    product_id = (view.get("product") or {}).get("id") if isinstance(view.get("product"), dict) else None
+    product = db.get(Product, uuid.UUID(product_id)) if product_id else None
+    return _published_pdf(request, db, product)
+
+
 @router.get("/{briefing_id}")
 def get_briefing(
     briefing_id: uuid.UUID,
@@ -126,6 +159,24 @@ def briefing_view(
     if "admin" not in principal.roles and "duty_officer" not in principal.roles and row.status != "published":
         raise APIError(404, "not_found", "Briefing not found")
     return ok(briefing_document(db, row))
+
+
+@router.get("/{briefing_id}/emergency-map.pdf")
+def briefing_emergency_pdf(
+    briefing_id: uuid.UUID,
+    request: Request,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+):
+    """GeoPDF for a published product cited by this briefing. Unpublished citations are skipped."""
+    principal.require("briefing.read")
+    row = _get(db, briefing_id, principal.org_id)
+    if "admin" not in principal.roles and "duty_officer" not in principal.roles and row.status != "published":
+        raise APIError(404, "not_found", "Briefing not found")
+    view = briefing_document(db, row)
+    product_id = (view.get("product") or {}).get("id") if isinstance(view.get("product"), dict) else None
+    product = db.get(Product, uuid.UUID(product_id)) if product_id else None
+    return _published_pdf(request, db, product)
 
 
 @router.patch("/{briefing_id}")

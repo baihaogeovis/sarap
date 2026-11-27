@@ -15,6 +15,8 @@ from app.services.map_layers import (
     area_outline,
     display_layers_for,
     emergency_document,
+    geopdf_path_for,
+    raster_layers_for,
     summarize_impact,
 )
 
@@ -151,6 +153,8 @@ def compose_product_view(
             "aoi": area_outline(area) if area else None,
         },
         "layers": display_layers_for(db, product, area),
+        "rasters": raster_layers_for(db, product),
+        "geopdf_path": geopdf_path_for(db, product),
         "emergency_map": emergency or None,
         "source_note": _SOURCE + f" 产品「{product.title}」v{product.version}。",
     }
@@ -187,6 +191,8 @@ def empty_view(
             "aoi": area_outline(area) if area else None,
         },
         "layers": [],
+        "rasters": [],
+        "geopdf_path": None,
         "emergency_map": None,
         "source_note": _SOURCE,
     }

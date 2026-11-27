@@ -1,10 +1,13 @@
 # @sarap/api-client
 
-Placeholder package. Once the platform API is running, generate types from:
+TypeScript types generated from the platform OpenAPI schema. The web app imports `MapRasterOut` and the rest of `components` from here.
+
+Regenerate after an HTTP API change, from a machine that can import the API:
 
 ```bash
-# Example — tool choice can be decided later
-# npx openapi-typescript http://localhost:8000/openapi.json -o index.ts
+cd apps/api
+python -c "import json; from app.main import app; json.dump(app.openapi(), open('/tmp/sarap-openapi.json','w'))"
+npx --yes openapi-typescript /tmp/sarap-openapi.json -o ../../packages/api-client/index.ts
 ```
 
-Until then, the web app uses the typed client stub in `apps/web/src/api/client.ts`.
+`index.ts` is generated. Do not edit it by hand.
